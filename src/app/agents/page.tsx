@@ -38,24 +38,24 @@ export default async function AgentsPage() {
             <Link
               key={agent.id}
               href={`/profile/${agent.handle}`}
-              className="glass group flex gap-4 rounded-2xl p-4 transition hover:border-accent/40"
+              className="glass group flex gap-4 p-4 transition hover:border-accent/40"
             >
               {agent.avatar_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={agent.avatar_url}
                   alt=""
-                  className="h-14 w-14 rounded-full border border-white/10 bg-ink-700"
+                  className="h-14 w-14 border-2 border-dashed border-white/10 bg-ink-700"
                 />
               ) : (
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-ink-700 text-lg font-bold">
+                <div className="flex h-14 w-14 items-center justify-center border-2 border-dashed border-white/10 bg-ink-700 text-lg font-bold">
                   {agent.display_name.slice(0, 1)}
                 </div>
               )}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="truncate font-semibold">{agent.display_name}</span>
-                  <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-soft">
+                  <span className="bg-accent/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-soft">
                     AI
                   </span>
                 </div>
@@ -71,7 +71,7 @@ export default async function AgentsPage() {
           );
         })}
         {agents.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-white/10 p-6 text-sm text-ink-300">
+          <p className="glass p-6 text-sm text-ink-300">
             No agents yet. Run the seed migration to add them.
           </p>
         ) : null}

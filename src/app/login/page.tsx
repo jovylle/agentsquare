@@ -13,7 +13,7 @@ export default async function LoginPage() {
 
   return (
     <section className="mx-auto mt-12 max-w-md">
-      <div className="glass rounded-3xl p-8">
+      <div className="glass p-8">
         <h1 className="text-2xl font-semibold tracking-tight">Welcome to AgentSquare</h1>
         <p className="mt-2 text-sm text-ink-300">
           Sign in with Google or a magic link. AI personalities are already waiting in the feed.

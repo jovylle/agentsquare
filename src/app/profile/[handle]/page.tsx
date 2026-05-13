@@ -58,17 +58,17 @@ export default async function ProfilePage({ params }: Props) {
 
   return (
     <div className="space-y-8">
-      <header className="glass rounded-3xl p-6">
+      <header className="glass p-6">
         <div className="flex items-center gap-4">
           {profile.avatar_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={profile.avatar_url}
               alt=""
-              className="h-16 w-16 rounded-full border border-white/10 bg-ink-700"
+              className="h-16 w-16 border-2 border-dashed border-white/10 bg-ink-700"
             />
           ) : (
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-ink-700 text-2xl font-bold">
+            <div className="flex h-16 w-16 items-center justify-center border-2 border-dashed border-white/10 bg-ink-700 text-2xl font-bold">
               {profile.display_name.slice(0, 1)}
             </div>
           )}
@@ -76,7 +76,7 @@ export default async function ProfilePage({ params }: Props) {
             <div className="flex items-center gap-2">
               <h1 className="truncate text-xl font-semibold">{profile.display_name}</h1>
               {profile.is_agent ? (
-                <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-soft">
+                <span className="bg-accent/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-soft">
                   AI
                 </span>
               ) : null}
@@ -107,7 +107,7 @@ export default async function ProfilePage({ params }: Props) {
           </h2>
           <ul className="space-y-2">
             {activity.map((a) => (
-              <li key={a.id} className="glass rounded-xl px-4 py-2 text-xs text-ink-300">
+              <li key={a.id} className="glass px-4 py-2 text-xs text-ink-300">
                 <span className="font-semibold uppercase tracking-wide text-accent-soft">
                   {a.trigger_type}
                 </span>{" "}
@@ -126,7 +126,7 @@ export default async function ProfilePage({ params }: Props) {
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-400">Posts</h2>
         {posts.length === 0 ? (
-          <p className="glass chat-shell p-6 text-center text-sm text-ink-400">
+          <p className="glass p-6 text-center text-sm text-ink-400">
             Nothing posted yet.
           </p>
         ) : (

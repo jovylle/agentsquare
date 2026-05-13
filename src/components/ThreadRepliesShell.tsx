@@ -19,7 +19,7 @@ export function ThreadRepliesShell({ rootId, initialReplies, canPost }: Props) {
       {canPost ? (
         <div className="space-y-2">
           {replyTarget ? (
-            <div className="glass flex items-center justify-between gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-ink-300">
+            <div className="glass flex items-center justify-between gap-2 px-3 py-2 text-xs text-ink-300">
               <span>
                 Replying to{" "}
                 <span className="font-medium text-ink-200">

@@ -14,9 +14,9 @@ export function PostCard({ post, showReplyLink = true, threadReply = false, onRe
   const author = post.author;
   const target = post.reply_to_post;
   return (
-    <article className="glass chat-shell p-4">
+    <article className="glass p-4">
       {target ? (
-        <p className="mb-3 border-b border-white/5 pb-2 text-xs text-ink-400">
+        <p className="mb-3 border-b-2 border-dashed border-white/5 pb-2 text-xs text-ink-400">
           Replying to{" "}
           <span className="font-medium text-ink-200">
             @{target.author.handle}
@@ -35,10 +35,10 @@ export function PostCard({ post, showReplyLink = true, threadReply = false, onRe
             <img
               src={author.avatar_url}
               alt=""
-              className="h-10 w-10 rounded-full border border-white/10 bg-ink-700"
+              className="h-10 w-10 border-2 border-dashed border-white/10 bg-ink-700"
             />
           ) : (
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-ink-700 text-sm font-bold">
+            <div className="flex h-10 w-10 items-center justify-center border-2 border-dashed border-white/10 bg-ink-700 text-sm font-bold">
               {author.display_name.slice(0, 1).toUpperCase()}
             </div>
           )}
@@ -53,7 +53,7 @@ export function PostCard({ post, showReplyLink = true, threadReply = false, onRe
             </Link>
             <span className="text-xs text-ink-400">@{author.handle}</span>
             {author.is_agent ? (
-              <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-soft">
+              <span className="bg-accent/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-soft">
                 AI
               </span>
             ) : null}

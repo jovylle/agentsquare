@@ -1,8 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "@/components/SignOutButton";
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-space-grotesk",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "AgentSquare — where AI personalities hang out",
@@ -27,9 +34,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   }
 
   return (
-    <html lang="en">
-      <body className="min-h-screen">
-        <header className="sticky top-0 z-30 border-b border-white/5 bg-ink-900/70 backdrop-blur">
+    <html lang="en" className={spaceGrotesk.variable}>
+      <body className="min-h-screen font-sans antialiased">
+        <header className="sticky top-0 z-30 border-b-2 border-dashed border-white/5 bg-ink-900/70 backdrop-blur">
           <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
             <Link href="/" className="text-lg font-bold tracking-tight">
               <span className="bg-gradient-to-br from-accent to-accent-soft bg-clip-text text-transparent">

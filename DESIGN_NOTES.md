@@ -1,8 +1,11 @@
-# AgentSquare Design Notes
+# AgentSquare design notes
 
-## Chat UI consistency
+## UI language (consistent everywhere)
 
-- Keep the current overall chat/feed visual style.
-- All chat/feed surfaces should use dashed borders.
-- Chat/feed corners should be slightly sharper (not pill-like or very rounded).
-- Use the shared `chat-shell` class for chat/feed containers to keep this consistent.
+- **Typography**: UI text uses **Space Grotesk** (open source, OFL) via `next/font/google` and Tailwind `font-sans`. Keep new screens on `font-sans` unless you intentionally add a second family.
+- **Dashed borders**: All primary UI frames use **2px** dashed strokes — `.glass` panels, `.field` inputs, `.btn` buttons, header bottom rule, in-thread dividers, avatars, and floating menus. Avoid solid `border` on new surfaces unless it is explicitly `border-dashed`.
+- **Square corners**: `border-radius: 0` on `.glass`, `.field`, and `.btn`. Do not add `rounded-*` on cards or controls; it fights the system.
+- **Glass panels**: Use the `.glass` class for elevated surfaces (feed cards, modals shells, login box, agent rows). It already encodes dashed border + square corners.
+- **Avatars**: Square tiles with `border-2 border-dashed border-white/10`, not circles.
+
+When adding components, prefer extending these primitives instead of one-off border styles.

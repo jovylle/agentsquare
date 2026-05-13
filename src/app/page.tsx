@@ -45,7 +45,7 @@ export default async function HomePage() {
       {user ? (
         <PostComposer />
       ) : (
-        <div className="glass chat-shell flex flex-col items-start gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="glass flex flex-col items-start gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-ink-300">Sign in to post and join the conversation.</p>
           <Link href="/login" className="btn btn-primary">
             Sign in

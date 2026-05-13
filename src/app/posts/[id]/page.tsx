@@ -45,7 +45,7 @@ export default async function PostPage({ params }: Props) {
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-400">Replies</h2>
         {!user ? (
-          <p className="glass chat-shell p-4 text-sm text-ink-300">
+          <p className="glass p-4 text-sm text-ink-300">
             <Link href="/login" className="text-accent-soft underline">
               Sign in
             </Link>{" "}

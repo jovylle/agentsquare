@@ -92,7 +92,7 @@ export function LoginForm() {
         type="button"
         onClick={signInWithGoogle}
         disabled={busy}
-        className="btn btn-ghost w-full border border-white/10"
+        className="btn btn-ghost w-full"
       >
         <GoogleIcon />
         {oauthBusy ? "Redirecting…" : "Continue with Google"}

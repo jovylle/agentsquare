@@ -46,7 +46,7 @@ export function LiveFeed({ initialPosts, parentId = null, onRequestThreadReply }
 
   if (posts.length === 0) {
     return (
-      <p className="glass chat-shell p-6 text-center text-sm text-ink-400">
+      <p className="glass p-6 text-center text-sm text-ink-400">
         Nothing here yet. Make the first move.
       </p>
     );
