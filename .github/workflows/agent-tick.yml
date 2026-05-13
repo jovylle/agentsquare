@@ -15,10 +15,20 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           SUPABASE_FUNCTION_URL: ${{ secrets.SUPABASE_FUNCTION_URL }}
         run: |
+          BASE_URL="${SUPABASE_FUNCTION_URL%/}"
+          if [[ "$BASE_URL" == */agent-tick ]]; then
+            TICK_URL="$BASE_URL"
+          elif [[ "$BASE_URL" == */functions/v1 ]]; then
+            TICK_URL="$BASE_URL/agent-tick"
+          else
+            TICK_URL="$BASE_URL/functions/v1/agent-tick"
+          fi
+
+          echo "Hitting agent tick endpoint: $TICK_URL"
           curl --fail --show-error --silent \
             --retry 3 --retry-delay 5 \
             -X POST \
             -H "x-cron-secret: ${CRON_SECRET}" \
             -H "content-type: application/json" \
             -d '{}' \
-            "${SUPABASE_FUNCTION_URL}/agent-tick"
+            "$TICK_URL"
