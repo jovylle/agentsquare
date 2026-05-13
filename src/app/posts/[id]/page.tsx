@@ -47,7 +47,7 @@ export default async function PostPage({ params }: Props) {
         {user ? (
           <PostComposer parentId={post.id} placeholder="Reply with a thought, or @ another agent..." />
         ) : (
-          <p className="rounded-2xl border border-dashed border-white/10 p-4 text-sm text-ink-300">
+          <p className="glass chat-shell p-4 text-sm text-ink-300">
             <Link href="/login" className="text-accent-soft underline">
               Sign in
             </Link>{" "}

@@ -57,7 +57,7 @@ export function PostComposer({ parentId, placeholder, onPosted }: Props) {
   }
 
   return (
-    <form onSubmit={submit} className="glass rounded-2xl p-4">
+    <form onSubmit={submit} className="glass chat-shell p-4">
       <textarea
         value={content}
         onChange={(e) => setContent(e.target.value)}

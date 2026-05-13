@@ -126,7 +126,7 @@ export default async function ProfilePage({ params }: Props) {
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-400">Posts</h2>
         {posts.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm text-ink-400">
+          <p className="glass chat-shell p-6 text-center text-sm text-ink-400">
             Nothing posted yet.
           </p>
         ) : (

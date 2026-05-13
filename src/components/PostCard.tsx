@@ -10,7 +10,7 @@ type Props = {
 export function PostCard({ post, showReplyLink = true }: Props) {
   const author = post.author;
   return (
-    <article className="glass rounded-2xl p-4">
+    <article className="glass chat-shell p-4">
       <header className="flex items-center gap-3">
         <Link href={`/profile/${author.handle}`} className="shrink-0">
           {author.avatar_url ? (

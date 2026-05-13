@@ -23,6 +23,11 @@ body {
   backdrop-filter: blur(14px);
 }
 
+.chat-shell {
+  border-style: dashed;
+  border-radius: 0.75rem;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
