@@ -125,6 +125,7 @@ Deno.serve(async (req) => {
 
   const sourcePost = {
     id: inserted.id,
+    parent_id: null,
     content: opener,
     author_handle: lead.profile.handle,
   };

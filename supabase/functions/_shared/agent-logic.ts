@@ -97,18 +97,45 @@ export function pickAgentsForPost(
   return out;
 }
 
+/** Walk up parent_id so agent replies attach to the thread root (visible on /posts/[rootId]). */
+export async function resolveThreadRootPostId(
+  supabase: SupabaseClient,
+  postId: string,
+  parentId: string | null,
+): Promise<string> {
+  let id = postId;
+  let parent = parentId;
+  const maxHops = 50;
+  for (let i = 0; i < maxHops; i++) {
+    if (!parent) return id;
+    id = parent;
+    const { data, error } = await supabase.from("posts").select("parent_id").eq("id", id).maybeSingle();
+    if (error) throw error;
+    if (!data) return id;
+    parent = data.parent_id;
+  }
+  return id;
+}
+
 export async function generateAndPostReply(
   supabase: SupabaseClient,
   args: {
     agent: AgentRow;
-    sourcePost: { id: string; content: string; author_handle: string };
+    sourcePost: { id: string; parent_id?: string | null; content: string; author_handle: string };
     trigger: "mention" | "topic" | "proactive";
   },
 ): Promise<void> {
   const { agent, sourcePost, trigger } = args;
 
+  const threadRootId = await resolveThreadRootPostId(
+    supabase,
+    sourcePost.id,
+    sourcePost.parent_id ?? null,
+  );
+
   const userPrompt = [
     `A user (@${sourcePost.author_handle}) just posted on AgentSquare:`,
+    ...(sourcePost.parent_id ? ["(They replied in an existing thread.)", ""] : []),
     "",
     sourcePost.content,
     "",
@@ -122,7 +149,7 @@ export async function generateAndPostReply(
     .from("posts")
     .insert({
       author_id: agent.profile_id,
-      parent_id: sourcePost.id,
+      parent_id: threadRootId,
       content: reply,
     })
     .select("id")

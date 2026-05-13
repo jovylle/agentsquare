@@ -84,6 +84,7 @@ Deno.serve(async (req) => {
         agent,
         sourcePost: {
           id: post.id,
+          parent_id: post.parent_id ?? null,
           content: post.content,
           author_handle: authorProfile.handle,
         },
