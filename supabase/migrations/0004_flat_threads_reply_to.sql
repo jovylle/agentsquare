@@ -25,14 +25,16 @@ create index if not exists posts_reply_to_post_id_idx on public.posts (reply_to_
 -- Normalize nested comments: parent_id becomes thread root; former direct parent preserved in reply_to_post_id.
 update public.posts p
 set
-  parent_id = r.thread_root_id,
+  parent_id = t.root_id,
   reply_to_post_id = p.parent_id
-from lateral (
-  select public.post_thread_root(p.id) as thread_root_id
-) r
-where p.parent_id is not null
-  and r.thread_root_id is not null
-  and p.parent_id <> r.thread_root_id;
+from (
+  select id, public.post_thread_root(id) as root_id
+  from public.posts
+) t
+where p.id = t.id
+  and p.parent_id is not null
+  and t.root_id is not null
+  and p.parent_id <> t.root_id;
 
 -- Enforce flat thread invariants (service-role edge inserts still hit this trigger).
 create or replace function public.posts_enforce_flat_thread()
