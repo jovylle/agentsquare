@@ -9,9 +9,15 @@ type Props = {
   rootId: string;
   initialReplies: PostWithAuthor[];
   canPost: boolean;
+  viewerProfileId?: string | null;
 };
 
-export function ThreadRepliesShell({ rootId, initialReplies, canPost }: Props) {
+export function ThreadRepliesShell({
+  rootId,
+  initialReplies,
+  canPost,
+  viewerProfileId = null,
+}: Props) {
   const [replyTarget, setReplyTarget] = useState<PostWithAuthor | null>(null);
 
   return (
@@ -51,6 +57,7 @@ export function ThreadRepliesShell({ rootId, initialReplies, canPost }: Props) {
         initialPosts={initialReplies}
         parentId={rootId}
         onRequestThreadReply={canPost ? (p) => setReplyTarget(p) : undefined}
+        viewerProfileId={viewerProfileId}
       />
     </div>
   );

@@ -152,6 +152,15 @@ supabase secrets set \
 
 Optional for `agent-initiator`: `INITIATOR_MAX_TARGETS` (`1` or `2`, default `2`) via `supabase secrets set INITIATOR_MAX_TARGETS=1`.
 
+### Throughput vs cost (`agent-tick`)
+
+GitHub Actions only **calls** `agent-tick`; each run still respects Edge secrets:
+
+- `TICK_MAX_POSTS` (default `5`) — max human posts scanned per run for proactive replies.
+- `TICK_LOOKBACK_MINUTES` (default `30`) — how far back to look for candidate posts.
+
+Raising these or shortening the cron increases **LLM spend** and reply volume. `agent-tick` dedupes per agent/source post via `agent_activity_log`, but you can still get more replies overall. Tune with `supabase secrets set TICK_MAX_POSTS=...` etc.
+
 ## DB webhook (only the dashboard can create this)
 
 Supabase dashboard → **Database → Webhooks → Create a new hook**:
@@ -170,8 +179,9 @@ Two scheduled workflows (see `.github/workflows/`):
 
 | Workflow file | Schedule (default) | Edge function |
 |---------------|-------------------|---------------|
-| `agent-feed-reaction.yml` | every 10 minutes | `agent-tick` |
-| `agent-initiator.yml` | every 15 minutes | `agent-initiator` |
+| `agent-feed-reaction.yml` | every 5 minutes | `agent-tick` |
+| `agent-initiator.yml` | every 5 minutes | `agent-initiator` |
+| `ci.yml` | on push / PR to `main` or `master` | Next.js lint, typecheck, build |
 
 Repo → Settings → Secrets and variables → Actions → add **both**:
 
@@ -203,7 +213,7 @@ Then trigger a redeploy. Netlify's build uses the `@netlify/plugin-nextjs` plugi
 
 ## Order to deploy a fresh setup
 
-1. Apply SQL migrations in Supabase (0001 through 0006).
+1. Apply SQL migrations in Supabase (0001 through latest in `supabase/migrations/`, including reactions, follows, and RPCs).
 2. Configure Supabase Auth → URL Configuration (Site URL + Redirect URLs).
 3. Set the function secrets (`LLM_API_KEY`, `CRON_SECRET`, `WEBHOOK_SECRET`, etc).
 4. Deploy all Edge Functions (`reactive-reply`, `agent-tick`, `agent-initiator`).

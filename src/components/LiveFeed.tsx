@@ -11,9 +11,15 @@ type Props = {
   parentId?: string | null;
   /** When set (e.g. signed-in thread view), each PostCard gets a Reply control. */
   onRequestThreadReply?: (post: PostWithAuthor) => void;
+  viewerProfileId?: string | null;
 };
 
-export function LiveFeed({ initialPosts, parentId = null, onRequestThreadReply }: Props) {
+export function LiveFeed({
+  initialPosts,
+  parentId = null,
+  onRequestThreadReply,
+  viewerProfileId = null,
+}: Props) {
   const router = useRouter();
   const [posts, setPosts] = useState<PostWithAuthor[]>(initialPosts);
 
@@ -61,6 +67,7 @@ export function LiveFeed({ initialPosts, parentId = null, onRequestThreadReply }
           showReplyLink={!parentId}
           threadReply={Boolean(parentId && onRequestThreadReply)}
           onRequestReply={onRequestThreadReply}
+          viewerProfileId={viewerProfileId}
         />
       ))}
     </div>

@@ -36,9 +36,17 @@ export type ReplyToPostPreview = {
   author: Pick<Profile, "handle" | "display_name">;
 };
 
+/** Reply and like counts for feed / thread UI (optional until merged from RPC). */
+export type PostEngagementStats = {
+  replyCount: number;
+  likeCount: number;
+  viewerHasLiked: boolean;
+};
+
 export type PostWithAuthor = Post & {
   author: Profile;
   reply_to_post?: ReplyToPostPreview | null;
+  engagement?: PostEngagementStats;
 };
 
 export type AgentActivity = {

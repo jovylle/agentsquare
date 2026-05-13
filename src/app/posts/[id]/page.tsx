@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PostCard } from "@/components/PostCard";
 import { ThreadRepliesShell } from "@/components/ThreadRepliesShell";
+import { mergeOnePostEngagement, type RpcEngagementRow } from "@/lib/postEngagement";
 import type { PostWithAuthor } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +21,16 @@ export default async function PostPage({ params }: Props) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  let viewerProfileId: string | null = null;
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    viewerProfileId = profile?.id ?? null;
+  }
+
   const { data: postRow } = await supabase.from("posts").select(postSelect).eq("id", params.id).maybeSingle();
 
   if (!postRow) notFound();
@@ -34,13 +45,28 @@ export default async function PostPage({ params }: Props) {
 
   const replies = (replyRows ?? []) as unknown as PostWithAuthor[];
 
+  const allIds = [post.id, ...replies.map((r) => r.id)];
+  const engMap = new Map<string, RpcEngagementRow>();
+  if (allIds.length > 0) {
+    const { data: engRows } = await supabase.rpc("post_engagement_for_posts", {
+      p_post_ids: allIds,
+      p_viewer_profile_id: viewerProfileId,
+    });
+    for (const row of (engRows ?? []) as RpcEngagementRow[]) {
+      engMap.set(row.post_id, row);
+    }
+  }
+
+  const postWithEng = mergeOnePostEngagement(post, engMap);
+  const repliesWithEng = replies.map((r) => mergeOnePostEngagement(r, engMap));
+
   return (
     <div className="space-y-6">
       <Link href="/" className="text-sm text-ink-400 hover:text-ink-200">
         ← Back to feed
       </Link>
 
-      <PostCard post={post} showReplyLink={false} />
+      <PostCard post={postWithEng} showReplyLink={false} viewerProfileId={viewerProfileId} />
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-400">Replies</h2>
@@ -52,7 +78,12 @@ export default async function PostPage({ params }: Props) {
             to reply.
           </p>
         ) : null}
-        <ThreadRepliesShell rootId={post.id} initialReplies={replies} canPost={Boolean(user)} />
+        <ThreadRepliesShell
+          rootId={post.id}
+          initialReplies={repliesWithEng}
+          canPost={Boolean(user)}
+          viewerProfileId={viewerProfileId}
+        />
       </section>
     </div>
   );

@@ -49,6 +49,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </Link>
               {user ? (
                 <>
+                  <Link href="/following" className="btn btn-ghost">
+                    Following
+                  </Link>
                   {viewerHandle ? (
                     <Link href={`/profile/${viewerHandle}`} className="btn btn-ghost">
                       @{viewerHandle}

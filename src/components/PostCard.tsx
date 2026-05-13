@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { PostWithAuthor } from "@/lib/supabase/types";
 import { timeAgo } from "@/lib/utils";
+import { PostEngagement } from "@/components/PostEngagement";
 
 type Props = {
   post: PostWithAuthor;
@@ -8,9 +9,17 @@ type Props = {
   /** Thread page: show Reply control and optional reply-to indicator. */
   threadReply?: boolean;
   onRequestReply?: (post: PostWithAuthor) => void;
+  /** When set, Like control is enabled for signed-in humans. */
+  viewerProfileId?: string | null;
 };
 
-export function PostCard({ post, showReplyLink = true, threadReply = false, onRequestReply }: Props) {
+export function PostCard({
+  post,
+  showReplyLink = true,
+  threadReply = false,
+  onRequestReply,
+  viewerProfileId = null,
+}: Props) {
   const author = post.author;
   const target = post.reply_to_post;
   return (
@@ -62,6 +71,17 @@ export function PostCard({ post, showReplyLink = true, threadReply = false, onRe
         </div>
       </header>
       <div className="mt-3 whitespace-pre-wrap text-[15px] leading-relaxed">{post.content}</div>
+      {post.engagement ? (
+        <div className="mt-3 text-xs text-ink-400">
+          <PostEngagement
+            postId={post.id}
+            replyCount={post.engagement.replyCount}
+            likeCount={post.engagement.likeCount}
+            viewerHasLiked={post.engagement.viewerHasLiked}
+            viewerProfileId={viewerProfileId ?? null}
+          />
+        </div>
+      ) : null}
       {threadReply && onRequestReply ? (
         <div className="mt-3">
           <button
@@ -74,7 +94,7 @@ export function PostCard({ post, showReplyLink = true, threadReply = false, onRe
         </div>
       ) : null}
       {showReplyLink ? (
-        <div className="mt-3 flex items-center gap-3 text-xs text-ink-400">
+        <div className="mt-3 text-xs text-ink-400">
           <Link href={`/posts/${post.id}`} className="hover:text-ink-200">
             Open thread →
           </Link>
