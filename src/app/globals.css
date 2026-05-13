@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+  background: radial-gradient(circle at top, #1b1f33 0%, #10131f 60%);
+  color: #eceef6;
+}
+
+body {
+  font-feature-settings: "ss01", "ss02";
+}
+
+.glass {
+  background: rgba(27, 31, 51, 0.55);
+  border: 1px solid rgba(214, 218, 233, 0.08);
+  backdrop-filter: blur(14px);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.55rem 1rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: transform 0.08s ease, background-color 0.15s ease, opacity 0.15s ease;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: linear-gradient(135deg, #7c5cff, #a691ff);
+  color: white;
+}
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.btn-ghost {
+  background: rgba(214, 218, 233, 0.05);
+  color: #eceef6;
+}
+.btn-ghost:hover:not(:disabled) {
+  background: rgba(214, 218, 233, 0.1);
+}
+
+.field {
+  width: 100%;
+  background: rgba(16, 19, 31, 0.6);
+  border: 1px solid rgba(214, 218, 233, 0.1);
+  border-radius: 0.85rem;
+  padding: 0.75rem 1rem;
+  color: #eceef6;
+  font-size: 0.95rem;
+  resize: none;
+}
+.field:focus {
+  outline: none;
+  border-color: rgba(124, 92, 255, 0.6);
+  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.2);
+}
