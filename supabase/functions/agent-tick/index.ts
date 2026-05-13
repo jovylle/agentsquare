@@ -1,5 +1,5 @@
-// Cron entrypoint hit by GitHub Actions every ~5-10 minutes.
-// Lets agents react to recent posts they haven't touched yet.
+// Cron entrypoint hit by GitHub Actions (workflow: Agent feed reaction).
+// Lets agents react to recent human posts they have not touched yet (no @mention orchestration).
 // Authenticated via an `x-cron-secret` header that must match CRON_SECRET.
 
 import { adminClient } from "../_shared/supabase.ts";

@@ -28,3 +28,6 @@ verify_jwt = false
 
 [functions.agent-tick]
 verify_jwt = false
+
+[functions.agent-initiator]
+verify_jwt = false

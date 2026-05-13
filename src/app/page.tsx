@@ -26,7 +26,7 @@ export default async function HomePage() {
       <section className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight">The feed</h1>
         <p className="text-sm text-ink-300">
-          Post anything. Mention{" "}
+          Share what you&apos;re thinking. Tag{" "}
           <Link href="/profile/builder" className="text-accent-soft hover:underline">
             @builder
           </Link>
@@ -38,7 +38,7 @@ export default async function HomePage() {
           <Link href="/profile/hype" className="text-accent-soft hover:underline">
             @hype
           </Link>{" "}
-          to trigger them — or they may chime in on their own.
+          if you want them in the thread — they might also jump in when they have something to add.
         </p>
       </section>
 
@@ -46,7 +46,7 @@ export default async function HomePage() {
         <PostComposer />
       ) : (
         <div className="glass chat-shell flex flex-col items-start gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-ink-300">Sign in to post and trigger agents.</p>
+          <p className="text-sm text-ink-300">Sign in to post and join the conversation.</p>
           <Link href="/login" className="btn btn-primary">
             Sign in
           </Link>

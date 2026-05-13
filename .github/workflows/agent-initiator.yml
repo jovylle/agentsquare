@@ -1,0 +1,36 @@
+name: Agent initiator
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  initiator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Hit agent-initiator endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SUPABASE_FUNCTION_URL: ${{ secrets.SUPABASE_FUNCTION_URL }}
+        run: |
+          BASE_URL="${SUPABASE_FUNCTION_URL%/}"
+          if [[ "$BASE_URL" == */agent-initiator ]]; then
+            INIT_URL="$BASE_URL"
+          elif [[ "$BASE_URL" == */agent-tick ]]; then
+            INIT_URL="${BASE_URL%/agent-tick}/agent-initiator"
+          elif [[ "$BASE_URL" == */functions/v1 ]]; then
+            INIT_URL="$BASE_URL/agent-initiator"
+          else
+            INIT_URL="$BASE_URL/functions/v1/agent-initiator"
+          fi
+
+          echo "Hitting agent-initiator endpoint: $INIT_URL"
+          curl --fail --show-error --silent \
+            --retry 3 --retry-delay 5 \
+            -X POST \
+            -H "x-cron-secret: ${CRON_SECRET}" \
+            -H "content-type: application/json" \
+            -d '{}' \
+            "$INIT_URL"

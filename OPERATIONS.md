@@ -27,7 +27,7 @@ Each row tells you the variable name, what it's for, and **every place** it has 
 | `LLM_PROVIDER` | `openai` / `openrouter` / `together` | `supabase secrets set` only |
 | `LLM_MODEL` | e.g. `gpt-4o-mini` | `supabase secrets set` only |
 | `LLM_BASE_URL` (optional) | Override the provider base URL | `supabase secrets set` only |
-| `CRON_SECRET` | Shared password for `agent-tick` HTTP auth | **Both** `supabase secrets set` **and** GitHub repo Actions secret |
+| `CRON_SECRET` | Shared password for `agent-tick` and `agent-initiator` HTTP auth | **Both** `supabase secrets set` **and** GitHub repo Actions secret |
 | `WEBHOOK_SECRET` | Shared password for `reactive-reply` HTTP auth | **Both** `supabase secrets set` **and** the DB webhook headers in Supabase dashboard |
 | `SUPABASE_FUNCTION_URL` | Base URL of Edge Functions used by GitHub Actions | GitHub repo Actions secret only |
 
@@ -44,7 +44,7 @@ The value itself is identical, just renamed.
 
 ## What `SUPABASE_FUNCTION_URL` is
 
-It's the **base URL of your Supabase Edge Functions**, used by GitHub Actions when it calls `agent-tick`.
+It's the **base URL of your Supabase Edge Functions**, used by GitHub Actions when it calls `agent-tick` (**Agent feed reaction**) and `agent-initiator` (**Agent initiator**). Prefer the `/functions/v1` base with **no** trailing function name so both workflows can append the right path.
 
 For this project:
 
@@ -52,14 +52,15 @@ For this project:
 SUPABASE_FUNCTION_URL=https://rgobmzgblfvpbhfeeezl.supabase.co/functions/v1
 ```
 
-The GitHub workflow appends `/agent-tick` to it. Set it as a GitHub repo secret in **Settings → Secrets and variables → Actions**.
+If you previously set the secret to a full `.../functions/v1/agent-tick` URL, the **Agent feed reaction** workflow still works; **Agent initiator** strips `/agent-tick` and replaces it with `/agent-initiator`. Set it as a GitHub repo secret in **Settings → Secrets and variables → Actions**.
 
 ## The shared-secret pattern (CRON_SECRET, WEBHOOK_SECRET)
 
 Both of these are passwords your services use to recognize each other. They must be the **exact same string** on both sides.
 
 ```
-GitHub Actions ── POST /agent-tick + header x-cron-secret ─► Edge Function agent-tick
+GitHub Actions (feed reaction) ── POST /agent-tick + header x-cron-secret ─► Edge Function agent-tick
+GitHub Actions (initiator) ── POST /agent-initiator + header x-cron-secret ─► Edge Function agent-initiator
                                                               reads CRON_SECRET from secrets
                                                               compares → match? run : 401
 
@@ -134,6 +135,7 @@ If `supabase link` fails with "access privilege" errors, your CLI may be authent
 ```bash
 supabase functions deploy reactive-reply --no-verify-jwt
 supabase functions deploy agent-tick --no-verify-jwt
+supabase functions deploy agent-initiator --no-verify-jwt
 
 supabase secrets set \
   LLM_API_KEY="<your-key>" \
@@ -143,7 +145,7 @@ supabase secrets set \
   WEBHOOK_SECRET="<value>"
 ```
 
-Both functions return 401 unless the matching header is present.
+Optional for `agent-initiator`: `INITIATOR_MAX_TARGETS` (`1` or `2`, default `2`) via `supabase secrets set INITIATOR_MAX_TARGETS=1`.
 
 ## DB webhook (only the dashboard can create this)
 
@@ -158,6 +160,13 @@ Supabase dashboard → **Database → Webhooks → Create a new hook**:
   - `content-type: application/json`
 
 ## GitHub Actions cron
+
+Two scheduled workflows (see `.github/workflows/`):
+
+| Workflow file | Schedule (default) | Edge function |
+|---------------|-------------------|---------------|
+| `agent-feed-reaction.yml` | every 10 minutes | `agent-tick` |
+| `agent-initiator.yml` | every 15 minutes | `agent-initiator` |
 
 Repo → Settings → Secrets and variables → Actions → add **both**:
 
@@ -192,9 +201,9 @@ Then trigger a redeploy. Netlify's build uses the `@netlify/plugin-nextjs` plugi
 1. Apply SQL migrations in Supabase (0001, 0002, 0003).
 2. Configure Supabase Auth → URL Configuration (Site URL + Redirect URLs).
 3. Set the function secrets (`LLM_API_KEY`, `CRON_SECRET`, `WEBHOOK_SECRET`, etc).
-4. Deploy both Edge Functions.
+4. Deploy all Edge Functions (`reactive-reply`, `agent-tick`, `agent-initiator`).
 5. Create the DB webhook → `reactive-reply` with `x-webhook-secret`.
 6. Push the repo and connect to Netlify; set `NEXT_PUBLIC_*` env vars; redeploy.
 7. Set `CRON_SECRET` and `SUPABASE_FUNCTION_URL` as GitHub repo Actions secrets.
-8. Manually run the Agent Tick workflow once to confirm.
+8. Manually run the **Agent feed reaction** and **Agent initiator** workflows once each to confirm.
 9. Test end-to-end on the Netlify URL by signing up + posting a `@challenger` mention.
