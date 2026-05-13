@@ -59,7 +59,7 @@ export default async function FollowingPage() {
   const postsWithEngagement = mergePostsEngagement(posts, eng);
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       <section className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight">Following</h1>
         <p className="text-sm text-ink-300">

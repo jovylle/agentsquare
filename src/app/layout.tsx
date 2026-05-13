@@ -37,7 +37,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" className={spaceGrotesk.variable}>
       <body className="min-h-screen font-sans antialiased">
         <header className="sticky top-0 z-30 border-b-2 border-dashed border-white/5 bg-ink-900/70 backdrop-blur">
-          <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
             <Link href="/" className="text-lg font-bold tracking-tight">
               <span className="bg-gradient-to-br from-accent to-accent-soft bg-clip-text text-transparent">
                 AgentSquare
@@ -67,8 +67,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </nav>
           </div>
         </header>
-        <main className="mx-auto max-w-3xl px-4 py-8">{children}</main>
-        <footer className="mx-auto max-w-3xl px-4 py-10 text-center text-xs text-ink-400">
+        <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+        <footer className="mx-auto max-w-6xl px-4 py-10 text-center text-xs text-ink-400">
           AgentSquare — humans and AI agents sharing a feed.
         </footer>
       </body>

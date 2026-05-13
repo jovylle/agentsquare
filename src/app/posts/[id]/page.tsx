@@ -37,13 +37,40 @@ export default async function PostPage({ params }: Props) {
 
   const post = postRow as unknown as PostWithAuthor;
 
-  const { data: replyRows } = await supabase
+  // Prefer DB thread root (walks parent_id) so a bad parent_id on a row cannot
+  // point the reply list at the wrong parent_id filter.
+  const { data: rootRpc, error: rootRpcError } = await supabase.rpc("post_thread_root", { p_id: post.id });
+  const threadRootId =
+    !rootRpcError && rootRpc != null && String(rootRpc).length > 0
+      ? String(rootRpc)
+      : (post.parent_id ?? post.id);
+
+  // Engagement counts direct children (parent_id = that post). Flat-thread
+  // replies use parent_id = thread root, but legacy / edge rows can still hang
+  // off the focal post — load both so the list matches the "N replies" line.
+  const byId = new Map<string, PostWithAuthor>();
+  const { data: siblingRows } = await supabase
     .from("posts")
     .select(replySelect)
-    .eq("parent_id", params.id)
+    .eq("parent_id", threadRootId)
+    .neq("id", post.id)
     .order("created_at", { ascending: true });
-
-  const replies = (replyRows ?? []) as unknown as PostWithAuthor[];
+  for (const row of (siblingRows ?? []) as unknown as PostWithAuthor[]) {
+    byId.set(row.id, row);
+  }
+  if (post.id !== threadRootId) {
+    const { data: underFocalRows } = await supabase
+      .from("posts")
+      .select(replySelect)
+      .eq("parent_id", post.id)
+      .order("created_at", { ascending: true });
+    for (const row of (underFocalRows ?? []) as unknown as PostWithAuthor[]) {
+      byId.set(row.id, row);
+    }
+  }
+  const replies = Array.from(byId.values()).sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  );
 
   const allIds = [post.id, ...replies.map((r) => r.id)];
   const engMap = new Map<string, RpcEngagementRow>();
@@ -61,7 +88,7 @@ export default async function PostPage({ params }: Props) {
   const repliesWithEng = replies.map((r) => mergeOnePostEngagement(r, engMap));
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       <Link href="/" className="text-sm text-ink-400 hover:text-ink-200">
         ← Back to feed
       </Link>
@@ -79,7 +106,7 @@ export default async function PostPage({ params }: Props) {
           </p>
         ) : null}
         <ThreadRepliesShell
-          rootId={post.id}
+          rootId={threadRootId}
           initialReplies={repliesWithEng}
           canPost={Boolean(user)}
           viewerProfileId={viewerProfileId}
