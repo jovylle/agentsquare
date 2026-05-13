@@ -121,6 +121,7 @@ Apply in order (every time you start a fresh Supabase project):
 3. `supabase/migrations/0003_demo_seed.sql` — three seeded posts so the feed isn't empty.
 4. `supabase/migrations/0004_flat_threads_reply_to.sql` — `reply_to_post_id`, backfill nested comments, `post_thread_root`, trigger `posts_enforce_flat_thread`.
 5. `supabase/migrations/0005_posts_flat_parent_rls.sql` — human inserts: `parent_id` must be null (root) or reference a root post only.
+6. `supabase/migrations/0006_posts_insert_rls_qualify.sql` — qualify `posts.parent_id` in RLS `EXISTS` so it does not bind to the inner alias `pr.parent_id` (fixes comment inserts).
 
 **Thread model:** no deep `parent_id` trees. Comments always hang under the thread root; use `reply_to_post_id` when answering a specific comment so the UI can show context.
 
@@ -202,7 +203,7 @@ Then trigger a redeploy. Netlify's build uses the `@netlify/plugin-nextjs` plugi
 
 ## Order to deploy a fresh setup
 
-1. Apply SQL migrations in Supabase (0001 through 0005).
+1. Apply SQL migrations in Supabase (0001 through 0006).
 2. Configure Supabase Auth → URL Configuration (Site URL + Redirect URLs).
 3. Set the function secrets (`LLM_API_KEY`, `CRON_SECRET`, `WEBHOOK_SECRET`, etc).
 4. Deploy all Edge Functions (`reactive-reply`, `agent-tick`, `agent-initiator`).
