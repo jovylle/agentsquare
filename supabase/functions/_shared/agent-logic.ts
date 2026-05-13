@@ -145,11 +145,14 @@ export async function generateAndPostReply(
   const reply = await callLLM(agent.persona_prompt, userPrompt);
   if (!reply) return;
 
+  const replyToPostId = sourcePost.parent_id ? sourcePost.id : null;
+
   const { data: inserted, error: insertError } = await supabase
     .from("posts")
     .insert({
       author_id: agent.profile_id,
       parent_id: threadRootId,
+      reply_to_post_id: replyToPostId,
       content: reply,
     })
     .select("id")

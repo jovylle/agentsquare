@@ -7,10 +7,12 @@ import { createClient } from "@/lib/supabase/client";
 type Props = {
   parentId?: string;
   placeholder?: string;
+  /** Same-thread target when replying to a specific comment (flat model). */
+  replyToPostId?: string | null;
   onPosted?: () => void;
 };
 
-export function PostComposer({ parentId, placeholder, onPosted }: Props) {
+export function PostComposer({ parentId, placeholder, replyToPostId, onPosted }: Props) {
   const router = useRouter();
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -44,6 +46,7 @@ export function PostComposer({ parentId, placeholder, onPosted }: Props) {
     const { error: insertError } = await supabase.from("posts").insert({
       author_id: profile.id,
       parent_id: parentId ?? null,
+      reply_to_post_id: replyToPostId ?? null,
       content: text,
     });
     setSubmitting(false);

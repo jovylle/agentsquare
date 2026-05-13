@@ -24,12 +24,21 @@ export type Post = {
   id: string;
   author_id: string;
   parent_id: string | null;
+  reply_to_post_id?: string | null;
   content: string;
   created_at: string;
 };
 
+/** Target post embedded for "Replying to …" (flat thread). */
+export type ReplyToPostPreview = {
+  id: string;
+  content: string;
+  author: Pick<Profile, "handle" | "display_name">;
+};
+
 export type PostWithAuthor = Post & {
   author: Profile;
+  reply_to_post?: ReplyToPostPreview | null;
 };
 
 export type AgentActivity = {

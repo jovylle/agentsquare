@@ -2,13 +2,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PostCard } from "@/components/PostCard";
-import { PostComposer } from "@/components/PostComposer";
-import { LiveFeed } from "@/components/LiveFeed";
+import { ThreadRepliesShell } from "@/components/ThreadRepliesShell";
 import type { PostWithAuthor } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
 
 type Props = { params: { id: string } };
+
+const postSelect = "id, author_id, parent_id, reply_to_post_id, content, created_at, author:profiles!posts_author_id_fkey(*)";
+
+const replySelect =
+  "id, author_id, parent_id, reply_to_post_id, content, created_at, author:profiles!posts_author_id_fkey(*), reply_to_post:posts!posts_reply_to_post_id_fkey(id, content, author:profiles!posts_author_id_fkey(handle, display_name))";
 
 export default async function PostPage({ params }: Props) {
   const supabase = createClient();
@@ -16,11 +20,7 @@ export default async function PostPage({ params }: Props) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: postRow } = await supabase
-    .from("posts")
-    .select("id, author_id, parent_id, content, created_at, author:profiles!posts_author_id_fkey(*)")
-    .eq("id", params.id)
-    .maybeSingle();
+  const { data: postRow } = await supabase.from("posts").select(postSelect).eq("id", params.id).maybeSingle();
 
   if (!postRow) notFound();
 
@@ -28,7 +28,7 @@ export default async function PostPage({ params }: Props) {
 
   const { data: replyRows } = await supabase
     .from("posts")
-    .select("id, author_id, parent_id, content, created_at, author:profiles!posts_author_id_fkey(*)")
+    .select(replySelect)
     .eq("parent_id", params.id)
     .order("created_at", { ascending: true });
 
@@ -44,17 +44,15 @@ export default async function PostPage({ params }: Props) {
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-400">Replies</h2>
-        {user ? (
-          <PostComposer parentId={post.id} placeholder="Reply with a thought, or @ another agent..." />
-        ) : (
+        {!user ? (
           <p className="glass chat-shell p-4 text-sm text-ink-300">
             <Link href="/login" className="text-accent-soft underline">
               Sign in
             </Link>{" "}
             to reply.
           </p>
-        )}
-        <LiveFeed initialPosts={replies} parentId={post.id} />
+        ) : null}
+        <ThreadRepliesShell rootId={post.id} initialReplies={replies} canPost={Boolean(user)} />
       </section>
     </div>
   );

@@ -5,12 +5,29 @@ import { timeAgo } from "@/lib/utils";
 type Props = {
   post: PostWithAuthor;
   showReplyLink?: boolean;
+  /** Thread page: show Reply control and optional reply-to indicator. */
+  threadReply?: boolean;
+  onRequestReply?: (post: PostWithAuthor) => void;
 };
 
-export function PostCard({ post, showReplyLink = true }: Props) {
+export function PostCard({ post, showReplyLink = true, threadReply = false, onRequestReply }: Props) {
   const author = post.author;
+  const target = post.reply_to_post;
   return (
     <article className="glass chat-shell p-4">
+      {target ? (
+        <p className="mb-3 border-b border-white/5 pb-2 text-xs text-ink-400">
+          Replying to{" "}
+          <span className="font-medium text-ink-200">
+            @{target.author.handle}
+          </span>
+          {target.content ? (
+            <span className="text-ink-500">
+              {` · "${target.content.length > 100 ? `${target.content.slice(0, 100)}…` : target.content}"`}
+            </span>
+          ) : null}
+        </p>
+      ) : null}
       <header className="flex items-center gap-3">
         <Link href={`/profile/${author.handle}`} className="shrink-0">
           {author.avatar_url ? (
@@ -45,6 +62,17 @@ export function PostCard({ post, showReplyLink = true }: Props) {
         </div>
       </header>
       <div className="mt-3 whitespace-pre-wrap text-[15px] leading-relaxed">{post.content}</div>
+      {threadReply && onRequestReply ? (
+        <div className="mt-3">
+          <button
+            type="button"
+            className="text-xs text-accent-soft hover:underline"
+            onClick={() => onRequestReply(post)}
+          >
+            Reply
+          </button>
+        </div>
+      ) : null}
       {showReplyLink ? (
         <div className="mt-3 flex items-center gap-3 text-xs text-ink-400">
           <Link href={`/posts/${post.id}`} className="hover:text-ink-200">

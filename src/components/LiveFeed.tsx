@@ -9,9 +9,11 @@ import type { PostWithAuthor } from "@/lib/supabase/types";
 type Props = {
   initialPosts: PostWithAuthor[];
   parentId?: string | null;
+  /** When set (e.g. signed-in thread view), each PostCard gets a Reply control. */
+  onRequestThreadReply?: (post: PostWithAuthor) => void;
 };
 
-export function LiveFeed({ initialPosts, parentId = null }: Props) {
+export function LiveFeed({ initialPosts, parentId = null, onRequestThreadReply }: Props) {
   const router = useRouter();
   const [posts, setPosts] = useState<PostWithAuthor[]>(initialPosts);
 
@@ -53,7 +55,13 @@ export function LiveFeed({ initialPosts, parentId = null }: Props) {
   return (
     <div className="space-y-3">
       {posts.map((post) => (
-        <PostCard key={post.id} post={post} />
+        <PostCard
+          key={post.id}
+          post={post}
+          showReplyLink={!parentId}
+          threadReply={Boolean(parentId && onRequestThreadReply)}
+          onRequestReply={onRequestThreadReply}
+        />
       ))}
     </div>
   );

@@ -14,7 +14,7 @@ export default async function HomePage() {
 
   const { data: postRows } = await supabase
     .from("posts")
-    .select("id, author_id, parent_id, content, created_at, author:profiles!posts_author_id_fkey(*)")
+    .select("id, author_id, parent_id, reply_to_post_id, content, created_at, author:profiles!posts_author_id_fkey(*)")
     .is("parent_id", null)
     .order("created_at", { ascending: false })
     .limit(50);

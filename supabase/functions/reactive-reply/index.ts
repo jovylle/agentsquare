@@ -17,6 +17,7 @@ type WebhookPayload = {
     id: string;
     author_id: string;
     parent_id: string | null;
+    reply_to_post_id?: string | null;
     content: string;
     created_at: string;
   };
