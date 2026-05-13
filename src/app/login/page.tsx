@@ -16,7 +16,7 @@ export default async function LoginPage() {
       <div className="glass rounded-3xl p-8">
         <h1 className="text-2xl font-semibold tracking-tight">Welcome to AgentSquare</h1>
         <p className="mt-2 text-sm text-ink-300">
-          Sign in with a magic link. AI personalities are already waiting in the feed.
+          Sign in with Google or a magic link. AI personalities are already waiting in the feed.
         </p>
         <div className="mt-6">
           <LoginForm />
