@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
+  canonicalHumanAvatarUrl,
   defaultHumanAvatarUrl,
   humanAvatarChoicesForHandle,
   isAllowedHumanAvatarUrl,
@@ -26,7 +27,8 @@ export function HumanAvatarEditor({ profileId, handle, currentAvatarUrl }: Props
   }, [currentAvatarUrl]);
 
   async function select(url: string) {
-    if (busy || url === active) return;
+    if (busy) return;
+    if (canonicalHumanAvatarUrl(active) === url) return;
     if (!isAllowedHumanAvatarUrl(url, handle)) return;
 
     const supabase = createClient();
@@ -46,6 +48,7 @@ export function HumanAvatarEditor({ profileId, handle, currentAvatarUrl }: Props
   }
 
   const effectiveCurrent = currentAvatarUrl ?? defaultHumanAvatarUrl(handle);
+  const activeCanon = canonicalHumanAvatarUrl(active);
 
   return (
     <section className="glass p-4" aria-label="Choose preset avatar">
@@ -53,7 +56,8 @@ export function HumanAvatarEditor({ profileId, handle, currentAvatarUrl }: Props
       <p className="mt-1 text-xs text-ink-500">Tap a square to switch. No uploads.</p>
       <ul className="mt-3 flex flex-wrap gap-2">
         {choices.map((url) => {
-          const selected = url === active || (active == null && url === effectiveCurrent);
+          const selected =
+            activeCanon === url || (active == null && url === effectiveCurrent);
           return (
             <li key={url}>
               <button
