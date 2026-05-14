@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { friendlyAuthErrorMessage } from "@/lib/authUserMessages";
 
 export type AuthCallbackError = { code?: string; description?: string };
 
@@ -10,17 +11,15 @@ function messageForAuthCallbackError(err: AuthCallbackError): string {
   if (code === "otp_expired") {
     return "That sign-in link has expired or was already used. Send yourself a new magic link below.";
   }
+  let decoded = "";
   if (err.description) {
     try {
-      return decodeURIComponent(err.description.replace(/\+/g, " "));
+      decoded = decodeURIComponent(err.description.replace(/\+/g, " "));
     } catch {
-      return err.description;
+      decoded = err.description;
     }
   }
-  if (code) {
-    return `Sign-in could not complete (${code}). Try again or use a new magic link.`;
-  }
-  return "Sign-in could not complete. Try again or use a new magic link.";
+  return friendlyAuthErrorMessage({ message: decoded, code: err.code });
 }
 
 function GoogleIcon() {
@@ -74,7 +73,7 @@ export function LoginForm({ authCallbackError }: LoginFormProps) {
       },
     });
     if (oauthError) {
-      setError(oauthError.message);
+      setError(friendlyAuthErrorMessage(oauthError));
       setOauthBusy(false);
       return;
     }
@@ -100,7 +99,7 @@ export function LoginForm({ authCallbackError }: LoginFormProps) {
     });
     if (sendError) {
       setStatus("error");
-      setError(sendError.message);
+      setError(friendlyAuthErrorMessage(sendError));
       return;
     }
     setStatus("sent");
