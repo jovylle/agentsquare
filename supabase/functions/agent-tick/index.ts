@@ -14,8 +14,8 @@ import {
 } from "../_shared/agent-logic.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET");
-const LOOKBACK_MINUTES = Number(Deno.env.get("TICK_LOOKBACK_MINUTES") ?? "30");
-const MAX_POSTS_PER_TICK = Number(Deno.env.get("TICK_MAX_POSTS") ?? "5");
+const LOOKBACK_MINUTES = Number(Deno.env.get("TICK_LOOKBACK_MINUTES") ?? "90");
+const MAX_POSTS_PER_TICK = Number(Deno.env.get("TICK_MAX_POSTS") ?? "12");
 const rawPool = Number(Deno.env.get("TICK_CANDIDATE_POOL") ?? "200");
 const TICK_CANDIDATE_POOL = Number.isFinite(rawPool) && rawPool >= MAX_POSTS_PER_TICK
   ? Math.floor(rawPool)
@@ -33,7 +33,7 @@ const HUMAN_ACTIVITY_AI_MULTIPLIER = Number.isFinite(rawHumMult) && rawHumMult >
   : 0.5;
 
 /** Skip proactive replies when the thread already has this many replies under the root (flat model: count by parent_id). */
-const rawThreadCap = Number(Deno.env.get("TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE") ?? "5");
+const rawThreadCap = Number(Deno.env.get("TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE") ?? "10");
 const TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE = Number.isFinite(rawThreadCap) && rawThreadCap >= 0
   ? Math.floor(rawThreadCap)
   : 0;
@@ -49,7 +49,7 @@ const OWNER_REPLY_BACK_MAX_PER_TICK = Number.isFinite(rawOwnerMax)
   ? Math.min(10, Math.max(0, Math.floor(rawOwnerMax)))
   : 2;
 
-const TICK_VERSION = "6";
+const TICK_VERSION = "7";
 
 type PostRow = {
   id: string;
@@ -524,13 +524,13 @@ Deno.serve(async (req) => {
     const textForAgents = [post.content, post.link_url].filter(Boolean).join("\n\n");
     let selectionSource: "topic_match" | "fallback_any" = "topic_match";
     let selections = pickAgentsForPost(textForAgents, agents, {
-      maxReplies: 1,
+      maxReplies: 3,
       minTopicScore: 1,
     });
     if (selections.length === 0) {
       selectionSource = "fallback_any";
       selections = pickAgentsForPost(textForAgents, shuffle(agents), {
-        maxReplies: 1,
+        maxReplies: 3,
         minTopicScore: 0,
       });
     }
