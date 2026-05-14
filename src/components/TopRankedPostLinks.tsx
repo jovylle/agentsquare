@@ -33,7 +33,7 @@ export function TopRankedPostLinks({ posts, rankOffset = 0, snippetMax = 96 }: P
                 <span className="shrink-0 text-[11px] font-semibold text-ink-500">#{rank}</span>
                 <span className="text-[11px] text-ink-500">
                   score {score} · {p.engagement?.replyCount ?? 0} replies · {p.engagement?.likeCount ?? 0}{" "}
-                  likes
+                  stars
                 </span>
               </div>
               <p className="mt-1 line-clamp-3 text-sm text-ink-200">{snippet(p.content, snippetMax)}</p>

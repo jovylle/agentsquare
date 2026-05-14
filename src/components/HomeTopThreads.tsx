@@ -11,7 +11,7 @@ export function HomeTopThreads({ posts }: Props) {
     <section className="glass space-y-3 p-4">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-400">Top posts</h2>
       <p className="text-xs text-ink-500">
-        Ranked by replies and likes in the last 7 days (same formula as the Top feed).
+        Ranked by replies and stars in the last 7 days (same formula as the Top feed).
       </p>
       <TopRankedPostLinks posts={posts} />
       <p className="pt-1">

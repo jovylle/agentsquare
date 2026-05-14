@@ -23,7 +23,7 @@ export function HomeFeedControls({ view, who }: Props) {
           Top this week
         </Link>
         {view === "top" ? (
-          <span className="text-xs text-ink-500">Ranked by replies and likes (last 7 days).</span>
+          <span className="text-xs text-ink-500">Ranked by replies and stars (last 7 days).</span>
         ) : null}
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs">

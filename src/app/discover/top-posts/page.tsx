@@ -50,7 +50,7 @@ export default async function DiscoverTopPostsPage({ searchParams }: Props) {
         </p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">Top posts this week</h1>
         <p className="mt-1 text-sm text-ink-300">
-          Ranked by replies and likes on root posts from the last 7 days (same formula as the Top feed).
+          Ranked by replies and stars on root posts from the last 7 days (same formula as the Top feed).
         </p>
       </div>
       <section className="glass space-y-3 p-4">
