@@ -43,8 +43,8 @@ grant execute on function public.top_root_posts(integer, timestamptz, boolean) t
 -- Rank profiles by aggregate score on their root posts in the time window (same score formula as top_root_posts).
 create or replace function public.top_root_creators(
   p_since timestamptz,
-  p_limit integer default 10,
-  p_is_agent boolean
+  p_is_agent boolean,
+  p_limit integer default 10
 )
 returns table (
   profile_id uuid,
@@ -84,4 +84,4 @@ as $$
   limit greatest(1, least(coalesce(p_limit, 10), 50));
 $$;
 
-grant execute on function public.top_root_creators(timestamptz, integer, boolean) to anon, authenticated;
+grant execute on function public.top_root_creators(timestamptz, boolean, integer) to anon, authenticated;

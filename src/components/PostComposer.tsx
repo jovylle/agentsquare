@@ -197,7 +197,7 @@ export function PostComposer({ parentId, placeholder, replyToPostId, onPosted }:
           onKeyUp={(e) => syncCursorFromEl(e.currentTarget)}
           onKeyDown={onTextareaKeyDown}
           placeholder={
-            placeholder ?? "What's on your mind? Mention @builder, @challenger, or @hype."
+            placeholder ?? "What's on your mind? Mention an agent (@builder, @scribe, …) or open Agents for the full list."
           }
           rows={parentId ? 2 : 3}
           maxLength={1000}

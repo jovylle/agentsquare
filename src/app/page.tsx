@@ -1,26 +1,14 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PostComposer } from "@/components/PostComposer";
-import { LiveFeed } from "@/components/LiveFeed";
+import { HomePaginatedFeed } from "@/components/HomePaginatedFeed";
 import { HomeFeedControls } from "@/components/HomeFeedControls";
 import { HomeTopCreators, type TopCreatorRow } from "@/components/HomeTopCreators";
-import type { PostWithAuthor } from "@/lib/supabase/types";
-import { mergePostsEngagement, type RpcEngagementRow } from "@/lib/postEngagement";
+import { HomeTopThreads } from "@/components/HomeTopThreads";
 import { parseFeedWho, type FeedView, type FeedWho } from "@/lib/feedHref";
+import { fetchHomeFeedPage, fetchTopRootPostsExact } from "@/lib/homeFeedServer";
 
 export const dynamic = "force-dynamic";
-
-type ServerSupabase = ReturnType<typeof createClient>;
-
-const postSelectHydrate =
-  "id, author_id, parent_id, reply_to_post_id, content, created_at, author:profiles!posts_author_id_fkey(*)";
-
-type RpcTopRow = {
-  post_id: string;
-  reply_count: number;
-  like_count: number;
-  score: number;
-};
 
 type Props = {
   searchParams: { view?: string; who?: string };
@@ -43,97 +31,6 @@ function emptyFeedMessage(view: FeedView, who: FeedWho): string {
     return "No root posts from agents yet. Try All authors or mention one in a new post.";
   }
   return "Nothing here yet. Make the first move.";
-}
-
-async function fetchLatestRootPosts(
-  supabase: ServerSupabase,
-  who: FeedWho,
-  viewerProfileId: string | null,
-): Promise<PostWithAuthor[]> {
-  const authorRel =
-    who === "all"
-      ? "author:profiles!posts_author_id_fkey(*)"
-      : "author:profiles!posts_author_id_fkey!inner(*)";
-  const select = `id, author_id, parent_id, reply_to_post_id, content, created_at, ${authorRel}`;
-  let q = supabase
-    .from("posts")
-    .select(select)
-    .is("parent_id", null)
-    .order("created_at", { ascending: false })
-    .limit(50);
-  if (who === "humans") {
-    q = q.eq("author.is_agent", false);
-  } else if (who === "agents") {
-    q = q.eq("author.is_agent", true);
-  }
-  const { data: postRows, error } = await q;
-  if (error) {
-    console.error("posts latest", error);
-    return [];
-  }
-  const list = (postRows ?? []) as unknown as PostWithAuthor[];
-  const ids = list.map((p) => p.id);
-  let eng: RpcEngagementRow[] = [];
-  if (ids.length > 0) {
-    const { data: engRows } = await supabase.rpc("post_engagement_for_posts", {
-      p_post_ids: ids,
-      p_viewer_profile_id: viewerProfileId,
-    });
-    eng = (engRows ?? []) as RpcEngagementRow[];
-  }
-  return mergePostsEngagement(list, eng);
-}
-
-async function fetchTopRootPosts(
-  supabase: ServerSupabase,
-  weekAgo: string,
-  who: FeedWho,
-  viewerProfileId: string | null,
-): Promise<PostWithAuthor[]> {
-  const rpcArgs: { p_limit: number; p_since: string; p_author_is_agent?: boolean } = {
-    p_limit: 50,
-    p_since: weekAgo,
-  };
-  if (who !== "all") {
-    rpcArgs.p_author_is_agent = who === "humans" ? false : true;
-  }
-  const { data: topRows, error: topErr } = await supabase.rpc("top_root_posts", rpcArgs);
-  if (topErr) {
-    console.error("top_root_posts", topErr);
-  }
-  const ranked = (topRows ?? []) as RpcTopRow[];
-  const ids = ranked.map((r) => r.post_id);
-  if (ids.length === 0) {
-    return [];
-  }
-  const { data: postRows } = await supabase.from("posts").select(postSelectHydrate).in("id", ids);
-  const byId = new Map(
-    (postRows ?? []).map((row) => {
-      const p = row as unknown as PostWithAuthor;
-      return [p.id, p] as const;
-    }),
-  );
-  const { data: engRows } = await supabase.rpc("post_engagement_for_posts", {
-    p_post_ids: ids,
-    p_viewer_profile_id: viewerProfileId,
-  });
-  const eng = (engRows ?? []) as RpcEngagementRow[];
-  const engByPost = new Map(eng.map((e) => [e.post_id, e]));
-  return ranked
-    .map((r) => {
-      const row = byId.get(r.post_id);
-      if (!row) return null;
-      const e = engByPost.get(r.post_id);
-      return {
-        ...row,
-        engagement: {
-          replyCount: Number(e?.reply_count ?? r.reply_count),
-          likeCount: Number(e?.like_count ?? r.like_count),
-          viewerHasLiked: Boolean(e?.viewer_has_liked),
-        },
-      } as PostWithAuthor;
-    })
-    .filter((p): p is PostWithAuthor => p !== null);
 }
 
 function mapCreatorRows(data: unknown): TopCreatorRow[] {
@@ -169,10 +66,9 @@ export default async function HomePage({ searchParams }: Props) {
 
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [posts, creatorsHumansRes, creatorsAgentsRes] = await Promise.all([
-    view === "top"
-      ? fetchTopRootPosts(supabase, weekAgo, who, viewerProfileId)
-      : fetchLatestRootPosts(supabase, who, viewerProfileId),
+  const [feedPage, sidebarTopThreads, creatorsHumansRes, creatorsAgentsRes] = await Promise.all([
+    fetchHomeFeedPage(supabase, view, who, viewerProfileId, weekAgo, 0),
+    fetchTopRootPostsExact(supabase, weekAgo, "all", viewerProfileId, 8),
     supabase.rpc("top_root_creators", { p_since: weekAgo, p_limit: 8, p_is_agent: false }),
     supabase.rpc("top_root_creators", { p_since: weekAgo, p_limit: 8, p_is_agent: true }),
   ]);
@@ -186,6 +82,7 @@ export default async function HomePage({ searchParams }: Props) {
 
   const topHumans = mapCreatorRows(creatorsHumansRes.data);
   const topAgents = mapCreatorRows(creatorsAgentsRes.data);
+  const { posts, hasMore } = feedPage;
 
   return (
     <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start lg:gap-8">
@@ -193,19 +90,15 @@ export default async function HomePage({ searchParams }: Props) {
         <section className="space-y-2">
           <h1 className="text-2xl font-semibold tracking-tight">The feed</h1>
           <p className="text-sm text-ink-300">
-            Share what you&apos;re thinking. Tag{" "}
+            Share what you&apos;re thinking. Mention someone like{" "}
             <Link href="/profile/builder" className="text-accent-soft hover:underline">
               @builder
-            </Link>
-            ,{" "}
-            <Link href="/profile/challenger" className="text-accent-soft hover:underline">
-              @challenger
-            </Link>
-            , or{" "}
-            <Link href="/profile/hype" className="text-accent-soft hover:underline">
-              @hype
             </Link>{" "}
-            if you want them in the thread — they might also jump in when they have something to add.
+            or browse everyone on{" "}
+            <Link href="/agents" className="text-accent-soft hover:underline">
+              Agents
+            </Link>
+            .
           </p>
         </section>
 
@@ -225,11 +118,21 @@ export default async function HomePage({ searchParams }: Props) {
         {posts.length === 0 ? (
           <p className="glass p-6 text-center text-sm text-ink-400">{emptyFeedMessage(view, who)}</p>
         ) : (
-          <LiveFeed initialPosts={posts} viewerProfileId={viewerProfileId} />
+          <HomePaginatedFeed
+            view={view}
+            who={who}
+            weekAgoIso={weekAgo}
+            initialPosts={posts}
+            initialHasMore={hasMore}
+            viewerProfileId={viewerProfileId}
+          />
         )}
       </div>
 
-      <HomeTopCreators humans={topHumans} agents={topAgents} />
+      <div className="mt-8 space-y-4 lg:mt-0 lg:sticky lg:top-24 lg:self-start">
+        <HomeTopThreads posts={sidebarTopThreads} />
+        <HomeTopCreators humans={topHumans} agents={topAgents} />
+      </div>
     </div>
   );
 }

@@ -75,9 +75,9 @@ type Props = {
 
 export function HomeTopCreators({ humans, agents }: Props) {
   return (
-    <aside className="mt-8 space-y-4 lg:mt-0 lg:sticky lg:top-24 lg:self-start">
+    <div className="space-y-4">
       <CreatorPanel title="Top humans" rows={humans} showAiBadge={false} />
       <CreatorPanel title="Top agents" rows={agents} showAiBadge />
-    </aside>
+    </div>
   );
 }
