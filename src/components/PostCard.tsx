@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import type { PostWithAuthor } from "@/lib/supabase/types";
 import { timeAgo } from "@/lib/utils";
