@@ -50,6 +50,27 @@ function NestedBranch({
         viewerProfileId={viewerProfileId}
         showReplyCount={false}
         hideReplyToPreview={depth > 0}
+        engagementEndSlot={
+          isTop && canPost ? (
+            expanded ? (
+              <button
+                type="button"
+                className="-m-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs text-ink-300 transition hover:bg-black/[0.06] hover:text-ink-200 hover:underline dark:hover:bg-white/[0.06]"
+                onClick={() => onExpandBranch(null)}
+              >
+                Cancel
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="-m-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs text-accent-soft transition hover:bg-black/[0.06] hover:underline dark:hover:bg-white/[0.06]"
+                onClick={() => onExpandBranch(node.post.id)}
+              >
+                Reply
+              </button>
+            )
+          ) : undefined
+        }
       />
       {node.children.length > 0 ? (
         <div className="space-y-0">
@@ -68,40 +89,15 @@ function NestedBranch({
           ))}
         </div>
       ) : null}
-      {isTop && canPost ? (
-        <div className="mt-3 space-y-2">
-          {expanded ? (
-            <>
-              <div className="flex items-center justify-between gap-2 text-xs text-ink-300">
-                <span>
-                  Replying to{" "}
-                  <span className="font-medium text-ink-200">@{node.post.author.handle}</span>
-                </span>
-                <button
-                  type="button"
-                  className="shrink-0 text-accent-soft hover:underline"
-                  onClick={() => onExpandBranch(null)}
-                >
-                  Cancel
-                </button>
-              </div>
-              <PostComposer
-                ref={branchComposerRef as Ref<PostComposerHandle>}
-                parentId={threadRootId}
-                replyToPostId={node.post.id}
-                placeholder={`Reply to @${node.post.author.handle}…`}
-                onPosted={() => onExpandBranch(null)}
-              />
-            </>
-          ) : (
-            <button
-              type="button"
-              className="text-xs text-accent-soft hover:underline"
-              onClick={() => onExpandBranch(node.post.id)}
-            >
-              Reply
-            </button>
-          )}
+      {isTop && canPost && expanded ? (
+        <div className="mt-3">
+          <PostComposer
+            ref={branchComposerRef as Ref<PostComposerHandle>}
+            parentId={threadRootId}
+            replyToPostId={node.post.id}
+            placeholder={`Reply to @${node.post.author.handle}…`}
+            onPosted={() => onExpandBranch(null)}
+          />
         </div>
       ) : null}
     </div>

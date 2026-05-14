@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { PostWithAuthor } from "@/lib/supabase/types";
 import { createClient } from "@/lib/supabase/client";
 import { timeAgo } from "@/lib/utils";
@@ -22,6 +22,8 @@ type Props = {
   showReplyCount?: boolean;
   /** Hide the flat-thread "Replying to @…" quote (e.g. when nested under that post in the tree). */
   hideReplyToPreview?: boolean;
+  /** Shown on the right of the star row (e.g. thread branch Reply / Cancel). */
+  engagementEndSlot?: ReactNode;
 };
 
 export function PostCard({
@@ -33,6 +35,7 @@ export function PostCard({
   showReplyCount = true,
   onThreadRootReply,
   hideReplyToPreview = false,
+  engagementEndSlot,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -67,6 +70,26 @@ export function PostCard({
       router.refresh();
     }
   }
+
+  const engagementTrailing =
+    engagementEndSlot ??
+    (threadReply && onRequestReply ? (
+      <button
+        type="button"
+        className="-m-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs text-accent-soft transition hover:bg-black/[0.06] hover:underline dark:hover:bg-white/[0.06]"
+        onClick={() => onRequestReply(post)}
+      >
+        Reply
+      </button>
+    ) : onThreadRootReply ? (
+      <button
+        type="button"
+        className="-m-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs text-accent-soft transition hover:bg-black/[0.06] hover:underline dark:hover:bg-white/[0.06]"
+        onClick={() => onThreadRootReply()}
+      >
+        Reply
+      </button>
+    ) : null);
 
   return (
     <article className="glass p-4">
@@ -152,38 +175,23 @@ export function PostCard({
           </a>
         </p>
       ) : null}
-      {post.engagement ? (
-        <div className="mt-3 text-xs text-ink-400">
-          <PostEngagement
-            postId={post.id}
-            replyCount={post.engagement.replyCount}
-            likeCount={post.engagement.likeCount}
-            viewerHasLiked={post.engagement.viewerHasLiked}
-            viewerProfileId={viewerProfileId ?? null}
-            showReplyCount={showReplyCount}
-          />
-        </div>
-      ) : null}
-      {threadReply && onRequestReply ? (
-        <div className="mt-3">
-          <button
-            type="button"
-            className="text-xs text-accent-soft hover:underline"
-            onClick={() => onRequestReply(post)}
-          >
-            Reply
-          </button>
-        </div>
-      ) : null}
-      {onThreadRootReply ? (
-        <div className="mt-3">
-          <button
-            type="button"
-            className="text-xs text-accent-soft hover:underline"
-            onClick={() => onThreadRootReply()}
-          >
-            Reply
-          </button>
+      {post.engagement || engagementTrailing ? (
+        <div
+          className={`mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs ${post.engagement && engagementTrailing ? "justify-between" : engagementTrailing ? "justify-end" : ""}`}
+        >
+          {post.engagement ? (
+            <div className="min-w-0 text-ink-400">
+              <PostEngagement
+                postId={post.id}
+                replyCount={post.engagement.replyCount}
+                likeCount={post.engagement.likeCount}
+                viewerHasLiked={post.engagement.viewerHasLiked}
+                viewerProfileId={viewerProfileId ?? null}
+                showReplyCount={showReplyCount}
+              />
+            </div>
+          ) : null}
+          {engagementTrailing ? <div className="flex shrink-0 items-center">{engagementTrailing}</div> : null}
         </div>
       ) : null}
     </article>
