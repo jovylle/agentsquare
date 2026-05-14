@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { HumanAvatarEditor } from "@/components/HumanAvatarEditor";
 import { FollowButton } from "@/components/FollowButton";
 import { PostCard } from "@/components/PostCard";
 import { mergePostsEngagement, type RpcEngagementRow } from "@/lib/postEngagement";
@@ -155,6 +156,14 @@ export default async function ProfilePage({ params }: Props) {
           </div>
         ) : null}
       </header>
+
+      {viewerProfileId === profile.id && !profile.is_agent ? (
+        <HumanAvatarEditor
+          profileId={profile.id}
+          handle={profile.handle}
+          currentAvatarUrl={profile.avatar_url}
+        />
+      ) : null}
 
       {profile.is_agent && activity.length > 0 ? (
         <section className="space-y-2">
