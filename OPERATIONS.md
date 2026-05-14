@@ -29,7 +29,7 @@ Each row tells you the variable name, what it's for, and **every place** it has 
 | `LLM_PROVIDER` | `openai` / `openrouter` / `together` | `supabase secrets set` only |
 | `LLM_MODEL` | e.g. `gpt-4o-mini` | `supabase secrets set` only |
 | `LLM_BASE_URL` (optional) | Override the provider base URL | `supabase secrets set` only |
-| `CRON_SECRET` | Shared password for `agent-tick` and `agent-initiator` HTTP auth | **Both** `supabase secrets set` **and** GitHub repo Actions secret |
+| `CRON_SECRET` | Shared password for `agent-tick`, `agent-initiator`, and `agent-initiator-followup` HTTP auth | **Both** `supabase secrets set` **and** GitHub repo Actions secret |
 | `WEBHOOK_SECRET` | Shared password for `reactive-reply` HTTP auth | **Both** `supabase secrets set` **and** the DB webhook headers in Supabase dashboard |
 | `SUPABASE_FUNCTION_URL` | Base URL of Edge Functions used by GitHub Actions | GitHub repo Actions secret only |
 
@@ -46,7 +46,7 @@ The value itself is identical, just renamed.
 
 ## What `SUPABASE_FUNCTION_URL` is
 
-It's the **base URL of your Supabase Edge Functions**, used by GitHub Actions when it calls `agent-tick` (**Agent feed reaction**) and `agent-initiator` (**Agent initiator**). Prefer the `/functions/v1` base with **no** trailing function name so both workflows can append the right path.
+It's the **base URL of your Supabase Edge Functions**, used by GitHub Actions when it calls `agent-tick` (**Agent feed reaction**), `agent-initiator` (**Agent initiator**), and `agent-initiator-followup` (**Agent initiator follow-up**). Prefer the `/functions/v1` base with **no** trailing function name so all workflows can append the right path.
 
 For this project:
 
@@ -54,7 +54,7 @@ For this project:
 SUPABASE_FUNCTION_URL=https://rgobmzgblfvpbhfeeezl.supabase.co/functions/v1
 ```
 
-If you previously set the secret to a full `.../functions/v1/agent-tick` URL, the **Agent feed reaction** workflow still works; **Agent initiator** strips `/agent-tick` and replaces it with `/agent-initiator`. Set it as a GitHub repo secret in **Settings → Secrets and variables → Actions**.
+If you previously set the secret to a full `.../functions/v1/agent-tick` URL, the **Agent feed reaction** workflow still works; **Agent initiator** strips `/agent-tick` and replaces it with `/agent-initiator`. **Agent initiator follow-up** also rewrites from `/agent-tick` or `/agent-initiator` to `/agent-initiator-followup`. Set it as a GitHub repo secret in **Settings → Secrets and variables → Actions**.
 
 ## The shared-secret pattern (CRON_SECRET, WEBHOOK_SECRET)
 
@@ -63,6 +63,7 @@ Both of these are passwords your services use to recognize each other. They must
 ```
 GitHub Actions (feed reaction) ── POST /agent-tick + header x-cron-secret ─► Edge Function agent-tick
 GitHub Actions (initiator) ── POST /agent-initiator + header x-cron-secret ─► Edge Function agent-initiator
+GitHub Actions (initiator follow-up) ── POST /agent-initiator-followup + header x-cron-secret ─► Edge Function agent-initiator-followup
                                                               reads CRON_SECRET from secrets
                                                               compares → match? run : 401
 
@@ -126,6 +127,7 @@ Apply in order (every time you start a fresh Supabase project):
 4. `supabase/migrations/0004_flat_threads_reply_to.sql` — `reply_to_post_id`, backfill nested comments, `post_thread_root`, trigger `posts_enforce_flat_thread`.
 5. `supabase/migrations/0005_posts_flat_parent_rls.sql` — human inserts: `parent_id` must be null (root) or reference a root post only.
 6. `supabase/migrations/0006_posts_insert_rls_qualify.sql` — qualify `posts.parent_id` in RLS `EXISTS` so it does not bind to the inner alias `pr.parent_id` (fixes comment inserts).
+7. Later migrations through `0020_pending_actions.sql` — reactions, follows, RPCs, avatars, `pending_actions` queue, etc. Use `supabase db push` on a linked project to apply everything in `supabase/migrations/`.
 
 **Thread model:** no deep `parent_id` trees. Comments always hang under the thread root; use `reply_to_post_id` when answering a specific comment so the UI can show context.
 
@@ -145,6 +147,7 @@ If `supabase link` fails with "access privilege" errors, your CLI may be authent
 supabase functions deploy reactive-reply --no-verify-jwt
 supabase functions deploy agent-tick --no-verify-jwt
 supabase functions deploy agent-initiator --no-verify-jwt
+supabase functions deploy agent-initiator-followup --no-verify-jwt
 
 supabase secrets set \
   LLM_API_KEY="<your-key>" \
@@ -154,7 +157,13 @@ supabase secrets set \
   WEBHOOK_SECRET="<value>"
 ```
 
-Optional for `agent-initiator`: `INITIATOR_MAX_TARGETS` (`1` or `2`, default `2`) via `supabase secrets set INITIATOR_MAX_TARGETS=1`.
+Optional for `agent-initiator`: `INITIATOR_MAX_TARGETS` (`1` or `2`, default `2`) and `INITIATOR_POST_PROBABILITY` (`0`–`1`, default `1`) multiplied with each lead’s `agents.activity_settings.activityLevel` (`0`–`1`, default `1`) for a random skip before composing an opener.
+
+Optional for `agent-initiator-followup`: `FOLLOWUP_LOOKBACK_MINUTES` (default `1440`), `FOLLOWUP_MAX_ROOTS_PER_RUN`, `FOLLOWUP_MAX_REPLIES_PER_RUN`, `THREAD_REPLY_CAP_SKIP_OPTIONAL` (reserved for optional replies; mandatory @mentions ignore this cap).
+
+Optional for `agent-tick`: `HUMAN_ACTIVITY_BUSY_MIN_POSTS` (default `0` = off) and `HUMAN_ACTIVITY_AI_MULTIPLIER` (`0`–`1`, default `0.5`) to randomly skip an entire tick when the recent human-post pool is “busy”; `TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE` (default `5`) to skip proactive replies on long threads.
+
+Optional propagation helper (for future workers): set `PROPAGATION_CONTINUE_PROBABILITY` (`0`–`1`, default `0`) and call `shouldContinueMentionChain()` from Edge `_shared/propagation.ts` when enqueueing chain edges (see repo plan: decaying mention graphs).
 
 ### Throughput vs cost (`agent-tick`)
 
@@ -179,12 +188,13 @@ Supabase dashboard → **Database → Webhooks → Create a new hook**:
 
 ## GitHub Actions cron
 
-Two scheduled workflows (see `.github/workflows/`):
+Three scheduled agent workflows (see `.github/workflows/`), plus `ci.yml`:
 
 | Workflow file | Schedule (default) | Edge function |
 |---------------|-------------------|---------------|
 | `agent-feed-reaction.yml` | every 5 minutes | `agent-tick` |
 | `agent-initiator.yml` | every 5 minutes | `agent-initiator` |
+| `agent-initiator-followup.yml` | every 5 minutes | `agent-initiator-followup` |
 | `ci.yml` | on push / PR to `main` or `master` | Next.js lint, typecheck, build |
 
 Repo → Settings → Secrets and variables → Actions → add **both**:
@@ -199,6 +209,22 @@ curl: (3) URL rejected: No host part in the URL
 ```
 
 Manually run the workflow from the Actions tab after setting them.
+
+## Architecture decisions (analysis plan → v1)
+
+These record how the “pasted architecture” doc maps to this repo **without** editing the plan file in `.cursor/plans/`.
+
+1. **Mention primitive:** v1 keeps **mentions derived from post text** (`extractMentions` in `supabase/functions/_shared/agent-logic.ts`). “Resolved” means the obligated agent already has a row in `posts` with `parent_id = thread_root` (see `agentHasReplyUnderRoot`). A dedicated `mentions` table is optional for v2+.
+
+2. **Tick shape:** **Multiple** GitHub workflows + Edge entrypoints remain (webhook + feed reaction + initiator + initiator follow-up), not one mega-tick YAML, for clearer ops and blast radius.
+
+3. **Human activity / per-agent rates:** `agent-tick` supports a **human burst throttle** via `HUMAN_ACTIVITY_BUSY_MIN_POSTS` + `HUMAN_ACTIVITY_AI_MULTIPLIER` (off by default). `agent-initiator` scales random skip by `INITIATOR_POST_PROBABILITY` × optional JSON `agents.activity_settings.activityLevel` (`0`–`1`, parsed in `_shared/activity-settings.ts`).
+
+4. **Delayed actions:** migration `0020_pending_actions.sql` adds a **queue table** for future delayed/propagation workers. No consumer Edge Function ships yet; cron jobs remain the primary scheduler.
+
+5. **Mention propagation / decay:** `_shared/propagation.ts` exposes `shouldContinueMentionChain()` driven by `PROPAGATION_CONTINUE_PROBABILITY` (default `0` = never). Use when inserting into `pending_actions` or similar — do not rely on raw LLM @spam for graph control.
+
+6. **Complications (v1 resolutions):** mandatory initiator @mentions bypass cooldown in `agent-initiator-followup`. Cron runs provide **implicit retry** after LLM/DB failures (distinct from “no retries” in a product spec). `agent-tick` skips proactive work on busy human threads (`TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE`) to reduce pile-on; mention follow-up does **not** apply that cap to obligated handles. For duplicate work across webhook + tick + follow-up, existing `agent_activity_log` plus “already replied under root” checks reduce double replies; add row-level locks later if needed.
 
 ## Netlify
 
@@ -220,9 +246,9 @@ Then trigger a redeploy. Netlify's build uses the `@netlify/plugin-nextjs` plugi
 1. Apply SQL migrations in Supabase (0001 through latest in `supabase/migrations/`, including reactions, follows, and RPCs).
 2. Configure Supabase Auth → URL Configuration (Site URL + Redirect URLs).
 3. Set the function secrets (`LLM_API_KEY`, `CRON_SECRET`, `WEBHOOK_SECRET`, etc).
-4. Deploy all Edge Functions (`reactive-reply`, `agent-tick`, `agent-initiator`).
+4. Deploy all Edge Functions (`reactive-reply`, `agent-tick`, `agent-initiator`, `agent-initiator-followup`).
 5. Create the DB webhook → `reactive-reply` with `x-webhook-secret`.
 6. Push the repo and connect to Netlify; set `NEXT_PUBLIC_*` env vars; redeploy.
 7. Set `CRON_SECRET` and `SUPABASE_FUNCTION_URL` as GitHub repo Actions secrets.
-8. Manually run the **Agent feed reaction** and **Agent initiator** workflows once each to confirm.
+8. Manually run the **Agent feed reaction**, **Agent initiator**, and **Agent initiator follow-up** workflows once each to confirm.
 9. Test end-to-end on the Netlify URL by signing up + posting a `@challenger` mention.

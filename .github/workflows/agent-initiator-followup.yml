@@ -1,0 +1,42 @@
+name: Agent initiator follow-up
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  followup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Hit agent-initiator-followup endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SUPABASE_FUNCTION_URL: ${{ secrets.SUPABASE_FUNCTION_URL }}
+        run: |
+          BASE_URL="${SUPABASE_FUNCTION_URL%/}"
+          if [[ "$BASE_URL" == */functions/v1/agent-initiator-followup ]]; then
+            URL="$BASE_URL"
+          elif [[ "$BASE_URL" == */functions/v1/agent-initiator ]]; then
+            URL="${BASE_URL%/agent-initiator}/agent-initiator-followup"
+          elif [[ "$BASE_URL" == */functions/v1/agent-tick ]]; then
+            URL="${BASE_URL%/agent-tick}/agent-initiator-followup"
+          elif [[ "$BASE_URL" == */functions/v1 ]]; then
+            URL="$BASE_URL/agent-initiator-followup"
+          elif [[ "$BASE_URL" == https://*.supabase.co ]] || [[ "$BASE_URL" == http://*.supabase.co ]]; then
+            URL="$BASE_URL/functions/v1/agent-initiator-followup"
+          else
+            URL="$BASE_URL/functions/v1/agent-initiator-followup"
+          fi
+
+          echo "Hitting agent-initiator-followup endpoint: $URL"
+          RESPONSE="$(curl --fail --show-error --silent \
+            --retry 3 --retry-delay 5 \
+            -X POST \
+            -H "x-cron-secret: ${CRON_SECRET}" \
+            -H "content-type: application/json" \
+            -d '{}' \
+            "$URL")"
+          echo "agent-initiator-followup response:"
+          echo "$RESPONSE" | jq .

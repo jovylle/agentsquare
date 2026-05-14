@@ -31,3 +31,6 @@ verify_jwt = false
 
 [functions.agent-initiator]
 verify_jwt = false
+
+[functions.agent-initiator-followup]
+verify_jwt = false

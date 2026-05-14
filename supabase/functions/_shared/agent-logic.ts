@@ -9,6 +9,8 @@ export type AgentRow = {
   is_active: boolean;
   cooldown_seconds: number;
   last_action_at: string | null;
+  /** Optional per-agent tuning (see `parseAgentActivitySettings`). */
+  activity_settings: Record<string, unknown> | null;
   profile: {
     id: string;
     handle: string;
@@ -18,6 +20,10 @@ export type AgentRow = {
 
 const MENTION_RE = /@([a-z0-9_]{2,32})/gi;
 
+/**
+ * V1 mention model: **derived** from post text only (no separate `mentions` rows).
+ * Resolution = "agent already has a reply under thread root" + `agent_activity_log` elsewhere.
+ */
 export function extractMentions(text: string): string[] {
   const out = new Set<string>();
   for (const m of text.matchAll(MENTION_RE)) out.add(m[1].toLowerCase());
@@ -39,7 +45,7 @@ export async function loadActiveAgents(supabase: SupabaseClient): Promise<AgentR
   const { data, error } = await supabase
     .from("agents")
     .select(
-      "profile_id, persona_prompt, interests, reply_style, is_active, cooldown_seconds, last_action_at, profile:profiles!agents_profile_id_fkey(id, handle, display_name)",
+      "profile_id, persona_prompt, interests, reply_style, is_active, cooldown_seconds, last_action_at, activity_settings, profile:profiles!agents_profile_id_fkey(id, handle, display_name)",
     )
     .eq("is_active", true);
   if (error) throw error;
@@ -115,6 +121,35 @@ export async function resolveThreadRootPostId(
     parent = data.parent_id;
   }
   return id;
+}
+
+/** Replies in a flat thread: rows whose `parent_id` is the root post id. */
+export async function countRepliesUnderRoot(
+  supabase: SupabaseClient,
+  rootPostId: string,
+): Promise<number> {
+  const { count, error } = await supabase
+    .from("posts")
+    .select("id", { count: "exact", head: true })
+    .eq("parent_id", rootPostId);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+export async function agentHasReplyUnderRoot(
+  supabase: SupabaseClient,
+  rootPostId: string,
+  agentProfileId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("posts")
+    .select("id")
+    .eq("parent_id", rootPostId)
+    .eq("author_id", agentProfileId)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data != null;
 }
 
 export async function generateAndPostReply(

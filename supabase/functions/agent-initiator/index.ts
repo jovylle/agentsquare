@@ -1,15 +1,9 @@
-// Cron entrypoint hit by GitHub Actions on a separate schedule from feed reactions.
-// One lead agent posts a root message that @mentions 1–2 others; each target gets
-// generateAndPostReply(..., "mention") explicitly (webhook skips agent-authored posts).
+// Cron: insert one lead agent root post with @mentions. Mention replies run in `agent-initiator-followup`.
 // Authenticated via x-cron-secret matching CRON_SECRET.
 
 import { adminClient } from "../_shared/supabase.ts";
-import {
-  loadActiveAgents,
-  isOnCooldown,
-  generateAndPostReply,
-  type AgentRow,
-} from "../_shared/agent-logic.ts";
+import { loadActiveAgents, isOnCooldown, type AgentRow } from "../_shared/agent-logic.ts";
+import { parseAgentActivitySettings } from "../_shared/activity-settings.ts";
 import { callLLM } from "../_shared/llm.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET");
@@ -17,6 +11,12 @@ const rawMax = Number(Deno.env.get("INITIATOR_MAX_TARGETS") ?? "2");
 const MAX_TARGETS = Number.isFinite(rawMax)
   ? Math.min(2, Math.max(1, Math.floor(rawMax)))
   : 2;
+
+/** When < 1, multiplied with each lead's `activity_settings.activityLevel` for a random skip. Default 1 = no extra gate. */
+const rawInitProb = Number(Deno.env.get("INITIATOR_POST_PROBABILITY") ?? "1");
+const INITIATOR_POST_PROBABILITY = Number.isFinite(rawInitProb) && rawInitProb >= 0 && rawInitProb <= 1
+  ? rawInitProb
+  : 1;
 
 const THEMES = [
   "first deploy nerves or going live with something small",
@@ -91,6 +91,20 @@ Deno.serve(async (req) => {
     });
   }
 
+  const { activityLevel } = parseAgentActivitySettings(lead.activity_settings);
+  const postChance = INITIATOR_POST_PROBABILITY * activityLevel;
+  if (Math.random() > postChance) {
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        skipped: "probability_gate",
+        lead: lead.profile.handle,
+        postChance,
+      }),
+      { headers: { "content-type": "application/json" } },
+    );
+  }
+
   const targetCount = Math.min(MAX_TARGETS, agents.length - 1);
   const targets = shuffled.slice(1, 1 + targetCount);
   const theme = THEMES[Math.floor(Math.random() * THEMES.length)] ?? THEMES[0]!;
@@ -123,34 +137,14 @@ Deno.serve(async (req) => {
     .update({ last_action_at: new Date().toISOString() })
     .eq("profile_id", lead.profile_id);
 
-  const sourcePost = {
-    id: inserted.id,
-    parent_id: null,
-    content: opener,
-    author_handle: lead.profile.handle,
-  };
-
-  const results: { handle: string; status: string }[] = [];
-  for (const agent of targets) {
-    if (isOnCooldown(agent)) {
-      results.push({ handle: agent.profile.handle, status: "cooldown" });
-      continue;
-    }
-    try {
-      await generateAndPostReply(supabase, {
-        agent,
-        sourcePost,
-        trigger: "mention",
-      });
-      results.push({ handle: agent.profile.handle, status: "replied" });
-    } catch (err) {
-      console.error("initiator reply failed", agent.profile.handle, err);
-      results.push({ handle: agent.profile.handle, status: "error" });
-    }
-  }
-
   return new Response(
-    JSON.stringify({ ok: true, lead: lead.profile.handle, opener_id: inserted.id, results }),
+    JSON.stringify({
+      ok: true,
+      lead: lead.profile.handle,
+      opener_id: inserted.id,
+      target_handles: targets.map((t) => t.profile.handle),
+      postChance,
+    }),
     { headers: { "content-type": "application/json" } },
   );
 });

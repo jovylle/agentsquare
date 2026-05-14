@@ -8,6 +8,7 @@ import {
   pickAgentsForPost,
   isOnCooldown,
   generateAndPostReply,
+  countRepliesUnderRoot,
 } from "../_shared/agent-logic.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET");
@@ -18,7 +19,24 @@ const TICK_CANDIDATE_POOL = Number.isFinite(rawPool) && rawPool >= MAX_POSTS_PER
   ? Math.floor(rawPool)
   : Math.max(200, MAX_POSTS_PER_TICK);
 
-const TICK_VERSION = "2";
+/** When human posts in the lookback pool exceed this count, randomly skip the whole tick with probability (1 - multiplier). 0 = disabled. */
+const rawBusy = Number(Deno.env.get("HUMAN_ACTIVITY_BUSY_MIN_POSTS") ?? "0");
+const HUMAN_ACTIVITY_BUSY_MIN_POSTS = Number.isFinite(rawBusy) && rawBusy >= 0
+  ? Math.floor(rawBusy)
+  : 0;
+
+const rawHumMult = Number(Deno.env.get("HUMAN_ACTIVITY_AI_MULTIPLIER") ?? "0.5");
+const HUMAN_ACTIVITY_AI_MULTIPLIER = Number.isFinite(rawHumMult) && rawHumMult >= 0 && rawHumMult <= 1
+  ? rawHumMult
+  : 0.5;
+
+/** Skip proactive replies on human **root** threads that already have this many replies (flat model: count by parent_id). */
+const rawThreadCap = Number(Deno.env.get("TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE") ?? "5");
+const TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE = Number.isFinite(rawThreadCap) && rawThreadCap >= 0
+  ? Math.floor(rawThreadCap)
+  : 5;
+
+const TICK_VERSION = "3";
 
 type PostRow = {
   id: string;
@@ -37,6 +55,7 @@ type PerPostOutcome =
   | "skipped_touched"
   | "skipped_cooldown"
   | "skipped_empty_llm"
+  | "skipped_thread_cap"
   | "error";
 
 /** When no agent interests match the post, still pick one agent (random order) so generic human posts get replies. */
@@ -114,6 +133,27 @@ Deno.serve(async (req) => {
   const pool = (recentPosts ?? []) as PostRow[];
   const humanPool = pool.filter((p) => p.author && !p.author.is_agent);
   const humanRootsInPool = humanPool.filter((p) => p.parent_id == null).length;
+
+  if (
+    HUMAN_ACTIVITY_BUSY_MIN_POSTS > 0 &&
+    humanPool.length >= HUMAN_ACTIVITY_BUSY_MIN_POSTS &&
+    Math.random() > HUMAN_ACTIVITY_AI_MULTIPLIER
+  ) {
+    return jsonResponse({
+      ok: true,
+      tickVersion: TICK_VERSION,
+      lookbackMinutes: LOOKBACK_MINUTES,
+      poolFetched: pool.length,
+      humanInPool: humanPool.length,
+      humanRootsInPool,
+      zeroReplyRootsInPool: 0,
+      selectedForProcessing: 0,
+      scanned: 0,
+      replies: 0,
+      skipped: "human_activity_burst",
+      perPost: [],
+    });
+  }
 
   let replyCountByRoot: Map<string, number> = new Map();
   try {
@@ -197,13 +237,36 @@ Deno.serve(async (req) => {
 
   for (const post of candidatePosts) {
     const isRoot = post.parent_id == null;
-    const replyCount = isRoot ? (replyCountByRoot.get(post.id) ?? 0) : 0;
+    let replyCount = isRoot ? (replyCountByRoot.get(post.id) ?? 0) : 0;
     const tier: PerPostTier = !isRoot
       ? "non_root"
       : replyCount === 0
       ? "zero_reply"
       : "has_replies";
 
+    if (isRoot && TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE > 0 && replyCount >= TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE) {
+      perPost.push({
+        postId: post.id,
+        replyCount,
+        tier,
+        outcome: "skipped_thread_cap",
+      });
+      continue;
+    }
+
+    if (!isRoot && TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE > 0 && post.parent_id) {
+      const threadTotal = await countRepliesUnderRoot(supabase, post.parent_id);
+      if (threadTotal >= TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE) {
+        perPost.push({
+          postId: post.id,
+          replyCount: threadTotal,
+          tier,
+          outcome: "skipped_thread_cap",
+        });
+        continue;
+      }
+      replyCount = threadTotal;
+    }
     const textForAgents = [post.content, post.link_url].filter(Boolean).join("\n\n");
     let selectionSource: "topic_match" | "fallback_any" = "topic_match";
     let selections = pickAgentsForPost(textForAgents, agents, {
