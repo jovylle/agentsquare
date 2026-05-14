@@ -3,9 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { PostComposer } from "@/components/PostComposer";
 import { HomePaginatedFeed } from "@/components/HomePaginatedFeed";
 import { HomeFeedControls } from "@/components/HomeFeedControls";
-import { HomeTopCreators, type TopCreatorRow } from "@/components/HomeTopCreators";
+import { HomeTopCreators } from "@/components/HomeTopCreators";
 import { HomeTopThreads } from "@/components/HomeTopThreads";
 import { parseFeedWho, type FeedView, type FeedWho } from "@/lib/feedHref";
+import { HOME_SIDEBAR_DISCOVERY_LIMIT } from "@/lib/homeFeedConstants";
+import { mapTopCreatorRows } from "@/lib/topCreators";
 import { fetchHomeFeedPage, fetchTopRootPostsExact } from "@/lib/homeFeedServer";
 
 export const dynamic = "force-dynamic";
@@ -33,19 +35,6 @@ function emptyFeedMessage(view: FeedView, who: FeedWho): string {
   return "Nothing here yet. Make the first move.";
 }
 
-function mapCreatorRows(data: unknown): TopCreatorRow[] {
-  const rows = (data ?? []) as Record<string, unknown>[];
-  return rows.map((r) => ({
-    profile_id: String(r.profile_id),
-    handle: String(r.handle),
-    display_name: String(r.display_name),
-    avatar_url: r.avatar_url == null ? null : String(r.avatar_url),
-    is_agent: Boolean(r.is_agent),
-    root_count: Number(r.root_count),
-    total_score: Number(r.total_score),
-  }));
-}
-
 export default async function HomePage({ searchParams }: Props) {
   const view: FeedView = searchParams?.view === "top" ? "top" : "latest";
   const who = parseFeedWho(searchParams?.who);
@@ -68,9 +57,17 @@ export default async function HomePage({ searchParams }: Props) {
 
   const [feedPage, sidebarTopThreads, creatorsHumansRes, creatorsAgentsRes] = await Promise.all([
     fetchHomeFeedPage(supabase, view, who, viewerProfileId, weekAgo, 0),
-    fetchTopRootPostsExact(supabase, weekAgo, "all", viewerProfileId, 8),
-    supabase.rpc("top_root_creators", { p_since: weekAgo, p_limit: 8, p_is_agent: false }),
-    supabase.rpc("top_root_creators", { p_since: weekAgo, p_limit: 8, p_is_agent: true }),
+    fetchTopRootPostsExact(supabase, weekAgo, "all", viewerProfileId, HOME_SIDEBAR_DISCOVERY_LIMIT),
+    supabase.rpc("top_root_creators", {
+      p_since: weekAgo,
+      p_limit: HOME_SIDEBAR_DISCOVERY_LIMIT,
+      p_is_agent: false,
+    }),
+    supabase.rpc("top_root_creators", {
+      p_since: weekAgo,
+      p_limit: HOME_SIDEBAR_DISCOVERY_LIMIT,
+      p_is_agent: true,
+    }),
   ]);
 
   if (creatorsHumansRes.error) {
@@ -80,8 +77,8 @@ export default async function HomePage({ searchParams }: Props) {
     console.error("top_root_creators agents", creatorsAgentsRes.error);
   }
 
-  const topHumans = mapCreatorRows(creatorsHumansRes.data);
-  const topAgents = mapCreatorRows(creatorsAgentsRes.data);
+  const topHumans = mapTopCreatorRows(creatorsHumansRes.data);
+  const topAgents = mapTopCreatorRows(creatorsAgentsRes.data);
   const { posts, hasMore } = feedPage;
 
   return (
@@ -129,9 +126,9 @@ export default async function HomePage({ searchParams }: Props) {
         )}
       </div>
 
-      <div className="mt-8 space-y-4 lg:mt-0 lg:sticky lg:top-24 lg:self-start">
-        <HomeTopThreads posts={sidebarTopThreads} />
+      <div className="mt-8 min-h-0 space-y-4 lg:mt-0 lg:sticky lg:top-24 lg:max-h-[calc(100dvh-7rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
         <HomeTopCreators humans={topHumans} agents={topAgents} />
+        <HomeTopThreads posts={sidebarTopThreads} />
       </div>
     </div>
   );

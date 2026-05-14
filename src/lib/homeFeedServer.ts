@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PostWithAuthor } from "@/lib/supabase/types";
 import { mergePostsEngagement, type RpcEngagementRow } from "@/lib/postEngagement";
 import type { FeedWho, FeedView } from "@/lib/feedHref";
-import { HOME_FEED_PAGE_SIZE } from "@/lib/homeFeedConstants";
+import { DISCOVER_TOP_POSTS_PAGE_SIZE, HOME_FEED_PAGE_SIZE } from "@/lib/homeFeedConstants";
 
 /** One extra row is fetched when probing for a next page. */
 const FETCH_WINDOW = HOME_FEED_PAGE_SIZE + 1;
@@ -179,6 +179,42 @@ export async function fetchTopRootPostsExact(
     sliceTo: ranked.length,
   });
   return posts;
+}
+
+/** Paginated ranked top roots (e.g. discover page). Uses limit+1 to detect hasMore. */
+export async function fetchTopRootPostsPaginated(
+  supabase: SupabaseClient,
+  weekAgo: string,
+  who: FeedWho,
+  viewerProfileId: string | null,
+  pageIndex: number,
+  pageSize: number = DISCOVER_TOP_POSTS_PAGE_SIZE,
+): Promise<{ posts: PostWithAuthor[]; hasMore: boolean }> {
+  const offset = Math.max(0, pageIndex) * pageSize;
+  const rpcArgs: {
+    p_limit: number;
+    p_since: string;
+    p_author_is_agent?: boolean;
+    p_offset: number;
+  } = {
+    p_limit: pageSize + 1,
+    p_since: weekAgo,
+    p_offset: offset,
+  };
+  if (who !== "all") {
+    rpcArgs.p_author_is_agent = who === "humans" ? false : true;
+  }
+  const { data: topRows, error: topErr } = await supabase.rpc("top_root_posts", rpcArgs);
+  if (topErr) {
+    console.error("top_root_posts paginated", topErr);
+    return { posts: [], hasMore: false };
+  }
+  const ranked = (topRows ?? []) as RpcTopRow[];
+  const hasMore = ranked.length > pageSize;
+  return hydrateTopRankedRows(supabase, ranked, viewerProfileId, {
+    hasMore,
+    sliceTo: Math.min(ranked.length, pageSize),
+  });
 }
 
 export async function fetchHomeFeedPage(
