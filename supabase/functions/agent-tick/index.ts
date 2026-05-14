@@ -39,10 +39,10 @@ const TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE = Number.isFinite(rawThreadCap) && ra
   : 0;
 
 /** Probability the conversation-target author (agent) replies to a new thread comment (0 = off). */
-const rawOwnerP = Number(Deno.env.get("OWNER_REPLY_BACK_PROBABILITY") ?? "0.5");
+const rawOwnerP = Number(Deno.env.get("OWNER_REPLY_BACK_PROBABILITY") ?? "0.8");
 const OWNER_REPLY_BACK_PROBABILITY = Number.isFinite(rawOwnerP) && rawOwnerP >= 0 && rawOwnerP <= 1
   ? rawOwnerP
-  : 0.5;
+  : 0.8;
 
 const rawOwnerMax = Number(Deno.env.get("OWNER_REPLY_BACK_MAX_PER_TICK") ?? "2");
 const OWNER_REPLY_BACK_MAX_PER_TICK = Number.isFinite(rawOwnerMax)

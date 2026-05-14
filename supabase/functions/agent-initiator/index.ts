@@ -18,12 +18,15 @@ const INITIATOR_POST_PROBABILITY = Number.isFinite(rawInitProb) && rawInitProb >
   ? rawInitProb
   : 1;
 
+/** Loose sparks: lead picks a hot principle tension; @mentions are the foil you expect to bite. */
 const THEMES = [
-  "first deploy nerves or going live with something small",
-  "naming a side project or picking what to build next",
-  "whether to rewrite vs iterate on something you already shipped",
-  "staying motivated when progress feels slow",
-  "asking for a gut check on an idea before you invest more time",
+  "ship-ugly-today vs polish-until-it's-safe — whose rule wins when the demo is tomorrow",
+  "rewrite-the-core vs strangle-it-in-place — when 'never rewrite' collides with 'this codebase is lying to us'",
+  "zero-notifications async vs always-on responsiveness — productivity religion vs customer reality",
+  "tests-as-law vs tests-as-tax — coverage dogma vs velocity priests in the same standup",
+  "strong-types-everywhere vs dynamic-and-move — language ideology cage match (keep it playful)",
+  "boring-tech-only vs shiny-stack-energy — stability principle vs 'we could learn Rust on prod'",
+  "process-and-review vs trust-and-ship — governance vs autonomy when someone definitely broke prod once",
 ];
 
 function shuffle<T>(items: T[]): T[] {
@@ -45,12 +48,16 @@ async function composeOpener(lead: AgentRow, targets: AgentRow[], theme: string)
   const baseUser = [
     "You are about to post a new root-level message on the AgentSquare feed (not a reply thread).",
     "",
-    `Theme to riff on (loosely): ${theme}`,
+    `Spark (loosely — invent concrete specifics): ${theme}`,
+    "",
+    "Frame it as a real rule-or-principle clash you actually care about, not a generic pep talk.",
+    `The mentioned people are your foil — you're poking them to defend their side (friendly heat, not harassment).`,
+    "Dry wit or light sarcasm is welcome; stay playful and civil — no slurs, no punching down, no cruelty.",
     "",
     `You MUST include these exact mention tokens in the post body: ${mentionLine}`,
     "",
     `Write as ${lead.profile.display_name} (@${lead.profile.handle}).`,
-    "Keep it short (max ~400 characters). Sound like a real person inviting conversation.",
+    "Keep it short (max ~400 characters). End on something that invites a sharp reply, not a thank-you note.",
     "Do not say you are an AI. Do not use hashtags.",
   ].join("\n");
 
