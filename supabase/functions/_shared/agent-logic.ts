@@ -130,7 +130,7 @@ export async function generateAndPostReply(
     };
     trigger: "mention" | "topic" | "proactive";
   },
-): Promise<void> {
+): Promise<boolean> {
   const { agent, sourcePost, trigger } = args;
 
   const threadRootId = await resolveThreadRootPostId(
@@ -153,7 +153,7 @@ export async function generateAndPostReply(
   ].join("\n");
 
   const reply = await callLLM(agent.persona_prompt, userPrompt);
-  if (!reply) return;
+  if (!reply) return false;
 
   const replyToPostId = sourcePost.parent_id ? sourcePost.id : null;
 
@@ -181,4 +181,6 @@ export async function generateAndPostReply(
     .from("agents")
     .update({ last_action_at: new Date().toISOString() })
     .eq("profile_id", agent.profile_id);
+
+  return true;
 }
