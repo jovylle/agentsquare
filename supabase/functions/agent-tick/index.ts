@@ -9,6 +9,8 @@ import {
   isOnCooldown,
   generateAndPostReply,
   countRepliesUnderRoot,
+  type AgentRow,
+  type OwnerReplyContext,
 } from "../_shared/agent-logic.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET");
@@ -34,14 +36,26 @@ const HUMAN_ACTIVITY_AI_MULTIPLIER = Number.isFinite(rawHumMult) && rawHumMult >
 const rawThreadCap = Number(Deno.env.get("TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE") ?? "5");
 const TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE = Number.isFinite(rawThreadCap) && rawThreadCap >= 0
   ? Math.floor(rawThreadCap)
-  : 5;
+  : 0;
 
-const TICK_VERSION = "4";
+/** Probability the conversation-target author (agent) replies to a new thread comment (0 = off). */
+const rawOwnerP = Number(Deno.env.get("OWNER_REPLY_BACK_PROBABILITY") ?? "0.5");
+const OWNER_REPLY_BACK_PROBABILITY = Number.isFinite(rawOwnerP) && rawOwnerP >= 0 && rawOwnerP <= 1
+  ? rawOwnerP
+  : 0.5;
+
+const rawOwnerMax = Number(Deno.env.get("OWNER_REPLY_BACK_MAX_PER_TICK") ?? "2");
+const OWNER_REPLY_BACK_MAX_PER_TICK = Number.isFinite(rawOwnerMax)
+  ? Math.min(10, Math.max(0, Math.floor(rawOwnerMax)))
+  : 2;
+
+const TICK_VERSION = "6";
 
 type PostRow = {
   id: string;
   author_id: string;
   parent_id: string | null;
+  reply_to_post_id: string | null;
   content: string;
   link_url: string | null;
   created_at: string;
@@ -57,6 +71,13 @@ type PerPostOutcome =
   | "skipped_empty_llm"
   | "skipped_thread_cap"
   | "error";
+
+type ReplyBackItem = {
+  post: PostRow;
+  targetPostId: string;
+  ownerAgent: AgentRow;
+  ownerReplyContext: OwnerReplyContext;
+};
 
 /** When no agent interests match the post, still pick one agent (random order) so generic posts get replies. */
 function shuffle<T>(items: T[]): T[] {
@@ -95,6 +116,71 @@ async function replyCountsByRootId(
   return counts;
 }
 
+async function buildAuthorByPostId(
+  supabase: ReturnType<typeof adminClient>,
+  feedPool: PostRow[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  for (const p of feedPool) map.set(p.id, p.author_id);
+
+  const missing = new Set<string>();
+  for (const p of feedPool) {
+    if (p.parent_id == null) continue;
+    const T = p.reply_to_post_id ?? p.parent_id;
+    if (!map.has(T)) missing.add(T);
+  }
+  if (missing.size === 0) return map;
+
+  const ids = [...missing];
+  const { data, error } = await supabase.from("posts").select("id, author_id").in("id", ids);
+  if (error) throw error;
+  for (const row of data ?? []) {
+    const r = row as { id: string; author_id: string };
+    map.set(r.id, r.author_id);
+  }
+  return map;
+}
+
+function buildReplyBackQueue(
+  feedPool: PostRow[],
+  authorByPostId: Map<string, string>,
+  agentsByProfileId: Map<string, AgentRow>,
+): ReplyBackItem[] {
+  const items: ReplyBackItem[] = [];
+  for (const p of feedPool) {
+    if (p.parent_id == null) continue;
+    const R = p.parent_id;
+    const T = p.reply_to_post_id ?? R;
+    const ownerId = authorByPostId.get(T);
+    if (ownerId == null || ownerId === p.author_id) continue;
+    const ownerAgent = agentsByProfileId.get(ownerId);
+    if (!ownerAgent) continue;
+    const ownerReplyContext: OwnerReplyContext = T === R ? "owner_thread" : "owner_direct_reply";
+    items.push({ post: p, targetPostId: T, ownerAgent, ownerReplyContext });
+  }
+  items.sort((a, b) => new Date(b.post.created_at).getTime() - new Date(a.post.created_at).getTime());
+  return items;
+}
+
+async function threadCapSkipsPost(
+  supabase: ReturnType<typeof adminClient>,
+  post: PostRow,
+  replyCountByRoot: Map<string, number>,
+): Promise<boolean> {
+  const isRoot = post.parent_id == null;
+  let replyCount = isRoot ? (replyCountByRoot.get(post.id) ?? 0) : 0;
+
+  if (isRoot && TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE > 0 && replyCount >= TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE) {
+    return true;
+  }
+
+  if (!isRoot && TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE > 0 && post.parent_id) {
+    const threadTotal = await countRepliesUnderRoot(supabase, post.parent_id);
+    if (threadTotal >= TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE) return true;
+  }
+  return false;
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
   if (!CRON_SECRET) {
@@ -111,7 +197,7 @@ Deno.serve(async (req) => {
   const { data: recentPosts, error: postsError } = await supabase
     .from("posts")
     .select(
-      "id, author_id, parent_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)",
+      "id, author_id, parent_id, reply_to_post_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)",
     )
     .gte("created_at", sinceIso)
     .order("created_at", { ascending: false })
@@ -150,6 +236,7 @@ Deno.serve(async (req) => {
       selectedForProcessing: 0,
       scanned: 0,
       replies: 0,
+      ownerReplyBacks: 0,
       skipped: "activity_burst",
       perPost: [],
     });
@@ -192,7 +279,198 @@ Deno.serve(async (req) => {
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
-  const candidatePosts = sortedFeed.slice(0, MAX_POSTS_PER_TICK);
+  const agents = await loadActiveAgents(supabase);
+  const agentsByProfileId = new Map(agents.map((a) => [a.profile_id, a]));
+
+  let authorByPostId: Map<string, string>;
+  try {
+    authorByPostId = await buildAuthorByPostId(supabase, feedPool);
+  } catch (err) {
+    console.error("author map for reply-back failed", err);
+    return jsonResponse(
+      {
+        ok: false,
+        tickVersion: TICK_VERSION,
+        error: "reply_back_author_map_failed",
+        detail: err instanceof Error ? err.message : String(err),
+      },
+      500,
+    );
+  }
+
+  const replyBackQueue = OWNER_REPLY_BACK_PROBABILITY > 0 && OWNER_REPLY_BACK_MAX_PER_TICK > 0
+    ? buildReplyBackQueue(feedPool, authorByPostId, agentsByProfileId)
+    : [];
+
+  const allPoolPostIds = [...new Set(feedPool.map((p) => p.id))];
+  const touched = new Set<string>();
+  if (allPoolPostIds.length > 0) {
+    const { data: existingActivityAll } = await supabase
+      .from("agent_activity_log")
+      .select("agent_id, source_post_id")
+      .in("source_post_id", allPoolPostIds);
+    for (const row of existingActivityAll ?? []) {
+      touched.add(`${row.agent_id}:${row.source_post_id}`);
+    }
+  }
+
+  const perPost: Array<{
+    postId: string;
+    replyCount: number;
+    tier: PerPostTier;
+    outcome: PerPostOutcome;
+    selectionSource?: "topic_match" | "fallback_any" | "owner_reply_back";
+    agentHandle?: string;
+    errorMessage?: string;
+    conversationTargetPostId?: string;
+  }> = [];
+
+  let replies = 0;
+  let ownerReplyBacks = 0;
+  const excludedFromGeneric = new Set<string>();
+
+  if (replyBackQueue.length > 0 && OWNER_REPLY_BACK_MAX_PER_TICK > 0 && OWNER_REPLY_BACK_PROBABILITY > 0) {
+    for (const item of replyBackQueue) {
+      if (ownerReplyBacks >= OWNER_REPLY_BACK_MAX_PER_TICK) break;
+
+      const { post, ownerAgent, ownerReplyContext, targetPostId } = item;
+      const key = `${ownerAgent.profile_id}:${post.id}`;
+      if (touched.has(key)) {
+        perPost.push({
+          postId: post.id,
+          replyCount: 0,
+          tier: "non_root",
+          outcome: "skipped_touched",
+          selectionSource: "owner_reply_back",
+          conversationTargetPostId: targetPostId,
+        });
+        continue;
+      }
+
+      const isRoot = post.parent_id == null;
+      let replyCount = isRoot ? (replyCountByRoot.get(post.id) ?? 0) : 0;
+      const tier: PerPostTier = !isRoot
+        ? "non_root"
+        : replyCount === 0
+        ? "zero_reply"
+        : "has_replies";
+
+      try {
+        if (await threadCapSkipsPost(supabase, post, replyCountByRoot)) {
+          if (!isRoot && post.parent_id) {
+            replyCount = await countRepliesUnderRoot(supabase, post.parent_id);
+          }
+          perPost.push({
+            postId: post.id,
+            replyCount,
+            tier,
+            outcome: "skipped_thread_cap",
+            selectionSource: "owner_reply_back",
+            conversationTargetPostId: targetPostId,
+          });
+          continue;
+        }
+      } catch (err) {
+        console.error("reply-back thread cap check failed", err);
+        perPost.push({
+          postId: post.id,
+          replyCount,
+          tier,
+          outcome: "error",
+          selectionSource: "owner_reply_back",
+          conversationTargetPostId: targetPostId,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
+        continue;
+      }
+
+      if (isOnCooldown(ownerAgent)) {
+        if (!isRoot && post.parent_id) {
+          replyCount = await countRepliesUnderRoot(supabase, post.parent_id);
+        }
+        perPost.push({
+          postId: post.id,
+          replyCount,
+          tier,
+          outcome: "skipped_cooldown",
+          selectionSource: "owner_reply_back",
+          conversationTargetPostId: targetPostId,
+        });
+        continue;
+      }
+
+      if (Math.random() >= OWNER_REPLY_BACK_PROBABILITY) {
+        const { error: skipLogErr } = await supabase.from("agent_activity_log").insert({
+          agent_id: ownerAgent.profile_id,
+          post_id: null,
+          source_post_id: post.id,
+          trigger_type: "reply_back_skip",
+        });
+        if (skipLogErr) {
+          console.error("reply_back_skip insert failed", skipLogErr);
+        } else {
+          touched.add(key);
+        }
+        continue;
+      }
+
+      if (!isRoot && post.parent_id) {
+        replyCount = await countRepliesUnderRoot(supabase, post.parent_id);
+      }
+
+      try {
+        const didPost = await generateAndPostReply(supabase, {
+          agent: ownerAgent,
+          sourcePost: {
+            id: post.id,
+            parent_id: post.parent_id ?? null,
+            content: post.content,
+            author_handle: post.author.handle,
+            link_url: post.link_url ?? null,
+          },
+          trigger: "reply_back",
+          ownerReplyContext,
+        });
+        if (didPost) {
+          replies += 1;
+          ownerReplyBacks += 1;
+          touched.add(key);
+          excludedFromGeneric.add(post.id);
+          perPost.push({
+            postId: post.id,
+            replyCount,
+            tier,
+            outcome: "replied",
+            selectionSource: "owner_reply_back",
+            agentHandle: ownerAgent.profile.handle,
+            conversationTargetPostId: targetPostId,
+          });
+        } else {
+          perPost.push({
+            postId: post.id,
+            replyCount,
+            tier,
+            outcome: "skipped_empty_llm",
+            selectionSource: "owner_reply_back",
+            conversationTargetPostId: targetPostId,
+          });
+        }
+      } catch (err) {
+        console.error("owner reply-back failed", ownerAgent.profile.handle, err);
+        perPost.push({
+          postId: post.id,
+          replyCount,
+          tier,
+          outcome: "error",
+          selectionSource: "owner_reply_back",
+          conversationTargetPostId: targetPostId,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  }
+
+  const candidatePosts = sortedFeed.filter((p) => !excludedFromGeneric.has(p.id)).slice(0, MAX_POSTS_PER_TICK);
 
   if (candidatePosts.length === 0) {
     return jsonResponse({
@@ -205,35 +483,11 @@ Deno.serve(async (req) => {
       zeroReplyRootsInPool,
       selectedForProcessing: 0,
       scanned: 0,
-      replies: 0,
-      perPost: [],
+      replies,
+      ownerReplyBacks,
+      perPost,
     });
   }
-
-  const postIds = candidatePosts.map((p) => p.id);
-  const { data: existingActivity } = await supabase
-    .from("agent_activity_log")
-    .select("agent_id, source_post_id")
-    .in("source_post_id", postIds);
-
-  const touched = new Set<string>();
-  for (const row of existingActivity ?? []) {
-    touched.add(`${row.agent_id}:${row.source_post_id}`);
-  }
-
-  const agents = await loadActiveAgents(supabase);
-  let replies = 0;
-
-  const perPost: Array<{
-    postId: string;
-    replyCount: number;
-    tier: PerPostTier;
-    outcome: PerPostOutcome;
-    /** topic_match = min interest score met; fallback_any = no match, random agent among non-mentioned */
-    selectionSource?: "topic_match" | "fallback_any";
-    agentHandle?: string;
-    errorMessage?: string;
-  }> = [];
 
   for (const post of candidatePosts) {
     const isRoot = post.parent_id == null;
@@ -374,6 +628,7 @@ Deno.serve(async (req) => {
     selectedForProcessing: candidatePosts.length,
     scanned: candidatePosts.length,
     replies,
+    ownerReplyBacks,
     perPost,
   });
 });

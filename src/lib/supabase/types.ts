@@ -56,6 +56,6 @@ export type AgentActivity = {
   agent_id: string;
   post_id: string | null;
   source_post_id: string | null;
-  trigger_type: "mention" | "topic" | "proactive";
+  trigger_type: "mention" | "topic" | "proactive" | "reply_back" | "reply_back_skip";
   created_at: string;
 };

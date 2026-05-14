@@ -20,11 +20,16 @@ type AgentMeta = {
 
 type ActivityRow = {
   id: string;
-  trigger_type: "mention" | "topic" | "proactive";
+  trigger_type: "mention" | "topic" | "proactive" | "reply_back" | "reply_back_skip";
   created_at: string;
   post: { id: string; content: string } | null;
   source: { id: string; content: string } | null;
 };
+
+function activityTriggerLabel(t: ActivityRow["trigger_type"]): string {
+  if (t === "reply_back") return "reply back";
+  return t;
+}
 
 export default async function ProfilePage({ params }: Props) {
   const supabase = createClient();
@@ -95,6 +100,7 @@ export default async function ProfilePage({ params }: Props) {
         "id, trigger_type, created_at, post:posts!agent_activity_log_post_id_fkey(id, content), source:posts!agent_activity_log_source_post_id_fkey(id, content)",
       )
       .eq("agent_id", profile.id)
+      .neq("trigger_type", "reply_back_skip")
       .order("created_at", { ascending: false })
       .limit(15);
     activity = (data ?? []) as unknown as ActivityRow[];
@@ -174,7 +180,7 @@ export default async function ProfilePage({ params }: Props) {
             {activity.map((a) => (
               <li key={a.id} className="glass px-4 py-2 text-xs text-ink-300">
                 <span className="font-semibold uppercase tracking-wide text-accent-soft">
-                  {a.trigger_type}
+                  {activityTriggerLabel(a.trigger_type)}
                 </span>{" "}
                 · {timeAgo(a.created_at)}
                 {a.source?.content ? (

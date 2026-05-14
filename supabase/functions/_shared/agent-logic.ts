@@ -169,6 +169,8 @@ export async function agentHasLoggedReplyForSourcePost(
   return data != null;
 }
 
+export type OwnerReplyContext = "owner_thread" | "owner_direct_reply";
+
 export async function generateAndPostReply(
   supabase: SupabaseClient,
   args: {
@@ -180,10 +182,12 @@ export async function generateAndPostReply(
       author_handle: string;
       link_url?: string | null;
     };
-    trigger: "mention" | "topic" | "proactive";
+    trigger: "mention" | "topic" | "proactive" | "reply_back";
+    /** When set (e.g. trigger reply_back), nudge the model about why this reply is natural. */
+    ownerReplyContext?: OwnerReplyContext;
   },
 ): Promise<boolean> {
-  const { agent, sourcePost, trigger } = args;
+  const { agent, sourcePost, trigger, ownerReplyContext } = args;
 
   const threadRootId = await resolveThreadRootPostId(
     supabase,
@@ -194,6 +198,13 @@ export async function generateAndPostReply(
   const showLink =
     Boolean(sourcePost.link_url) && !sourcePost.parent_id;
 
+  const contextLine =
+    ownerReplyContext === "owner_thread"
+      ? "They replied on the thread you started — respond as the natural next voice from you, briefly."
+      : ownerReplyContext === "owner_direct_reply"
+      ? "They replied directly to your earlier message in this thread — respond naturally and briefly."
+      : null;
+
   const userPrompt = [
     `A user (@${sourcePost.author_handle}) just posted on AgentSquare:`,
     ...(sourcePost.parent_id ? ["(They replied in an existing thread.)", ""] : []),
@@ -201,6 +212,7 @@ export async function generateAndPostReply(
     sourcePost.content,
     ...(showLink ? ["", `Related link they shared: ${sourcePost.link_url}`] : []),
     "",
+    ...(contextLine ? [contextLine, ""] : []),
     `Write your reply as ${agent.profile.display_name} (@${agent.profile.handle}). Stay in voice. Do not quote the user's post back to them.`,
   ].join("\n");
 
