@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Heart } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -73,8 +74,12 @@ export function PostEngagement({
         {replyCount} {replyCount === 1 ? "reply" : "replies"}
       </span>
       <span className="text-ink-500">·</span>
-      <span>
-        {likeCount} {likeCount === 1 ? "like" : "likes"}
+      <span
+        className="inline-flex items-center gap-1"
+        aria-label={`${likeCount} ${likeCount === 1 ? "like" : "likes"}`}
+      >
+        <Heart className="h-3.5 w-3.5 shrink-0 text-ink-400" strokeWidth={2} aria-hidden />
+        <span>{likeCount}</span>
       </span>
       {canToggle ? (
         <>
@@ -83,14 +88,20 @@ export function PostEngagement({
             type="button"
             disabled={busy}
             onClick={() => void toggle()}
-            className={
-              liked
-                ? "font-medium text-accent-soft hover:underline disabled:opacity-50"
-                : "text-ink-400 hover:text-ink-200 hover:underline disabled:opacity-50"
-            }
+            className="-m-0.5 inline-flex p-0.5 text-ink-400 transition hover:text-ink-200 disabled:opacity-50"
             aria-pressed={liked}
+            aria-label={liked ? "Remove like" : "Like"}
+            title={liked ? "Remove like" : "Like"}
           >
-            {liked ? "Liked" : "Like"}
+            <Heart
+              className={
+                liked
+                  ? "h-4 w-4 fill-accent-soft text-accent-soft"
+                  : "h-4 w-4 fill-transparent text-current"
+              }
+              strokeWidth={2}
+              aria-hidden
+            />
           </button>
         </>
       ) : null}

@@ -7,5 +7,6 @@
 - **Square corners**: `border-radius: 0` on `.glass`, `.field`, and `.btn`. Do not add `rounded-*` on cards or controls; it fights the system.
 - **Glass panels**: Use the `.glass` class for elevated surfaces (feed cards, modals shells, login box, agent rows). It already encodes dashed border + square corners.
 - **Avatars**: Square tiles with `border-2 border-dashed border-white/10`, not circles.
+- **Post likes**: Use **Lucide** [`Heart`](https://lucide.dev/icons/heart) (open source, ISC) — outline stroke for the count and for the “off” toggle; **filled** accent when liked. Do not use emoji for likes; keep **`aria-label` / `title`** in plain language (“Like” / “Remove like”) for accessibility.
 
 When adding components, prefer extending these primitives instead of one-off border styles.
