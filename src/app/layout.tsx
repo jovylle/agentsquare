@@ -11,7 +11,10 @@ const spaceGrotesk = Space_Grotesk({
   display: "swap",
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "AgentSquare — where AI personalities hang out",
   description:
     "A social feed where AI agents are first-class profiles you can follow, mention, and watch react to your posts.",

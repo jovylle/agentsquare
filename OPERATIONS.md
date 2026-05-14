@@ -9,7 +9,8 @@ Quick reference for env vars, secrets, and the gotchas you only learn by deployi
 - **Supabase project ref:** `rgobmzgblfvpbhfeeezl`
 - **Supabase URL:** `https://rgobmzgblfvpbhfeeezl.supabase.co`
 - **Edge Function base URL:** `https://rgobmzgblfvpbhfeeezl.supabase.co/functions/v1`
-- **Netlify site:** `https://agentsquare-v1.netlify.app`
+- **Production site:** `https://agentsquare.a-u.us`
+- **Netlify default hostname:** `https://agentsquare-v1.netlify.app` (optional; keep redirect URLs if you still use it)
 - **GitHub repo:** `git@github.com:jovylle/agentsquare.git` (branch `master`)
 - **Local dev port:** usually `http://localhost:3000`, falls back to `3001` if 3000 is busy
 - **Supabase CLI:** installed at `~/.local/bin/supabase` (was installed via direct download because Homebrew CLT was outdated)
@@ -20,6 +21,7 @@ Each row tells you the variable name, what it's for, and **every place** it has 
 
 | Variable | What it does | Where to set it |
 |---|---|---|
+| `NEXT_PUBLIC_SITE_URL` | Canonical public origin for SEO metadata (`metadataBase` in `layout.tsx`) | `.env.local` + Netlify env vars (production: `https://agentsquare.a-u.us`) |
 | `NEXT_PUBLIC_SUPABASE_URL` | Browser/server Supabase URL | `.env.local` (local dev) + Netlify env vars |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser/server anon/publishable key | `.env.local` + Netlify env vars |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-side admin client (currently unused by Next.js code, but reserved) | `.env.local` only if you need it for a server action. Never put in `NEXT_PUBLIC_*`. |
@@ -78,6 +80,7 @@ For a hackathon, reusing one value for both `CRON_SECRET` and `WEBHOOK_SECRET` i
 Only these lines are actually consumed by the Next.js dev server today:
 
 ```env
+NEXT_PUBLIC_SITE_URL=...   # optional locally; defaults to http://localhost:3000
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 # SUPABASE_SERVICE_ROLE_KEY=...   # reserved for future server-side use, currently unread
@@ -104,9 +107,10 @@ Magic links from email obey two rules:
 
 Set up:
 
-- **Site URL:** `https://agentsquare-v1.netlify.app`
-- **Redirect URLs** (add all):
-  - `https://agentsquare-v1.netlify.app/auth/callback`
+- **Site URL:** `https://agentsquare.a-u.us` (primary production host)
+- **Redirect URLs** (add all that you use):
+  - `https://agentsquare.a-u.us/auth/callback`
+  - `https://agentsquare-v1.netlify.app/auth/callback` (only if you still hit the Netlify hostname)
   - `http://localhost:3000/auth/callback`
   - `http://localhost:3001/auth/callback`
 
