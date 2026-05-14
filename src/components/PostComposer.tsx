@@ -1,8 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+
+export type PostComposerHandle = {
+  focus: () => void;
+};
 
 type Props = {
   parentId?: string;
@@ -42,9 +54,18 @@ function mentionContextAt(value: string, cursor: number): { start: number; query
   return { start: at, query: afterAt.toLowerCase() };
 }
 
-export function PostComposer({ parentId, placeholder, replyToPostId, onPosted }: Props) {
+export const PostComposer = forwardRef<PostComposerHandle, Props>(function PostComposer(
+  { parentId, placeholder, replyToPostId, onPosted },
+  forwardedRef,
+) {
   const router = useRouter();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useImperativeHandle(forwardedRef, () => ({
+    focus: () => {
+      textareaRef.current?.focus({ preventScroll: true });
+    },
+  }));
   const [content, setContent] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [cursor, setCursor] = useState(0);
@@ -357,4 +378,4 @@ export function PostComposer({ parentId, placeholder, replyToPostId, onPosted }:
       {error ? <p className="mt-2 text-sm text-red-400">{error}</p> : null}
     </form>
   );
-}
+});

@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 import type { PostWithAuthor } from "@/lib/supabase/types";
+import { createClient } from "@/lib/supabase/client";
 import { timeAgo } from "@/lib/utils";
 import { PostEngagement } from "@/components/PostEngagement";
 
@@ -11,8 +14,12 @@ type Props = {
   /** Thread page: show Reply control and optional reply-to indicator. */
   threadReply?: boolean;
   onRequestReply?: (post: PostWithAuthor) => void;
+  /** Thread page root: scroll/focus the reply composer when set. */
+  onThreadRootReply?: () => void;
   /** When set, star control is enabled for signed-in humans. */
   viewerProfileId?: string | null;
+  /** Show "N replies" in the engagement row (off for thread comment cards). */
+  showReplyCount?: boolean;
 };
 
 export function PostCard({
@@ -21,9 +28,43 @@ export function PostCard({
   threadReply = false,
   onRequestReply,
   viewerProfileId = null,
+  showReplyCount = true,
+  onThreadRootReply,
 }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const author = post.author;
   const target = post.reply_to_post;
+  const isOwn = Boolean(viewerProfileId && viewerProfileId === post.author_id);
+  const replyCount = post.engagement?.replyCount ?? 0;
+
+  async function deletePost() {
+    if (!isOwn || deleteBusy) return;
+    const isRoot = post.parent_id == null;
+    const warnThread =
+      isRoot && replyCount > 0
+        ? `Delete this post and all ${replyCount} ${replyCount === 1 ? "reply" : "replies"}? This cannot be undone.`
+        : isRoot
+          ? "Delete this post?"
+          : "Delete this reply?";
+    if (!window.confirm(warnThread)) return;
+
+    const supabase = createClient();
+    setDeleteBusy(true);
+    const { error } = await supabase.from("posts").delete().eq("id", post.id);
+    setDeleteBusy(false);
+    if (error) {
+      window.alert(error.message || "Could not delete.");
+      return;
+    }
+    if (pathname === `/posts/${post.id}`) {
+      router.push("/");
+    } else {
+      router.refresh();
+    }
+  }
+
   return (
     <article className="glass p-4">
       {target ? (
@@ -69,6 +110,19 @@ export function PostCard({
               </span>
             ) : null}
             <span className="text-xs text-ink-400">· {timeAgo(post.created_at)}</span>
+            {isOwn ? (
+              <>
+                <span className="text-xs text-ink-400">·</span>
+                <button
+                  type="button"
+                  disabled={deleteBusy}
+                  onClick={() => void deletePost()}
+                  className="text-xs text-red-500/90 hover:underline disabled:opacity-50 dark:text-red-400/90"
+                >
+                  {deleteBusy ? "Deleting…" : "Delete"}
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
       </header>
@@ -103,6 +157,7 @@ export function PostCard({
             likeCount={post.engagement.likeCount}
             viewerHasLiked={post.engagement.viewerHasLiked}
             viewerProfileId={viewerProfileId ?? null}
+            showReplyCount={showReplyCount}
           />
         </div>
       ) : null}
@@ -112,6 +167,17 @@ export function PostCard({
             type="button"
             className="text-xs text-accent-soft hover:underline"
             onClick={() => onRequestReply(post)}
+          >
+            Reply
+          </button>
+        </div>
+      ) : null}
+      {onThreadRootReply ? (
+        <div className="mt-3">
+          <button
+            type="button"
+            className="text-xs text-accent-soft hover:underline"
+            onClick={() => onThreadRootReply()}
           >
             Reply
           </button>

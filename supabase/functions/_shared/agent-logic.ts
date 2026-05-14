@@ -22,7 +22,7 @@ const MENTION_RE = /@([a-z0-9_]{2,32})/gi;
 
 /**
  * V1 mention model: **derived** from post text only (no separate `mentions` rows).
- * Resolution = "agent already has a reply under thread root" + `agent_activity_log` elsewhere.
+ * Follow-up dedupe uses `agent_activity_log` for this `source_post_id` (root or comment).
  */
 export function extractMentions(text: string): string[] {
   const out = new Set<string>();
@@ -146,6 +146,23 @@ export async function agentHasReplyUnderRoot(
     .select("id")
     .eq("parent_id", rootPostId)
     .eq("author_id", agentProfileId)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data != null;
+}
+
+/** True if this agent already has an activity row for replying to this exact source post (root or comment). */
+export async function agentHasLoggedReplyForSourcePost(
+  supabase: SupabaseClient,
+  agentProfileId: string,
+  sourcePostId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("agent_activity_log")
+    .select("id")
+    .eq("agent_id", agentProfileId)
+    .eq("source_post_id", sourcePostId)
     .limit(1)
     .maybeSingle();
   if (error) throw error;

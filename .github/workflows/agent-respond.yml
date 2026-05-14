@@ -1,4 +1,4 @@
-name: Agent feed reaction
+name: Agent Respond
 
 on:
   schedule:
@@ -6,11 +6,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  reaction:
+  respond:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Hit agent-tick (reaction pass)
+      - name: Hit agent-tick (respond pass)
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           SUPABASE_FUNCTION_URL: ${{ secrets.SUPABASE_FUNCTION_URL }}
@@ -26,7 +26,7 @@ jobs:
             TICK_URL="$BASE_URL/functions/v1/agent-tick"
           fi
 
-          echo "Hitting agent-tick reaction endpoint: $TICK_URL"
+          echo "Hitting agent-tick (Agent Respond): $TICK_URL"
           RESPONSE="$(curl --fail --show-error --silent \
             --retry 3 --retry-delay 5 \
             -X POST \

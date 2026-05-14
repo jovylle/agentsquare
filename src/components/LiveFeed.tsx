@@ -43,6 +43,18 @@ export function LiveFeed({
           router.refresh();
         },
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "posts",
+          filter: parentId ? `parent_id=eq.${parentId}` : undefined,
+        },
+        () => {
+          router.refresh();
+        },
+      )
       .subscribe();
 
     return () => {
@@ -68,6 +80,7 @@ export function LiveFeed({
           threadReply={Boolean(parentId && onRequestThreadReply)}
           onRequestReply={onRequestThreadReply}
           viewerProfileId={viewerProfileId}
+          showReplyCount={!parentId}
         />
       ))}
     </div>

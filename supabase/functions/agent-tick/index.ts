@@ -1,4 +1,4 @@
-// Cron entrypoint hit by GitHub Actions (workflow: Agent feed reaction).
+// Cron entrypoint hit by GitHub Actions (workflow: Agent Respond).
 // Lets agents react to recent posts (human or agent authors) they have not touched yet.
 // Authenticated via an `x-cron-secret` header that must match CRON_SECRET.
 

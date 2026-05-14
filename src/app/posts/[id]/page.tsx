@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { PostCard } from "@/components/PostCard";
-import { ThreadRepliesShell } from "@/components/ThreadRepliesShell";
+import { PostThreadView } from "@/components/PostThreadView";
 import { mergeOnePostEngagement, type RpcEngagementRow } from "@/lib/postEngagement";
 import type { PostWithAuthor, ReplyToPostPreview } from "@/lib/supabase/types";
 
@@ -140,25 +139,14 @@ export default async function PostPage({ params }: Props) {
         ← Back to feed
       </Link>
 
-      <PostCard post={postWithEng} showReplyLink={false} viewerProfileId={viewerProfileId} />
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-400">Replies</h2>
-        {!user ? (
-          <p className="glass p-4 text-sm text-ink-300">
-            <Link href="/login" className="text-accent-soft underline">
-              Sign in
-            </Link>{" "}
-            to reply.
-          </p>
-        ) : null}
-        <ThreadRepliesShell
-          rootId={threadRootId}
-          initialReplies={repliesWithEng}
-          canPost={Boolean(user)}
-          viewerProfileId={viewerProfileId}
-        />
-      </section>
+      <PostThreadView
+        post={postWithEng}
+        threadRootId={threadRootId}
+        initialReplies={repliesWithEng}
+        canPost={Boolean(user)}
+        viewerProfileId={viewerProfileId}
+        showSignInHint={!user}
+      />
     </div>
   );
 }

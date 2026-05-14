@@ -1,11 +1,12 @@
-// Cron: fulfill @mentions in recent root posts (any author). Uses derived @handles from post text.
-// Ignores cooldown for these obligations. Mandatory mentions still run when the thread already has many replies.
+// Cron: fulfill @mentions in recent root posts **and** thread comments/replies (any author).
+// Dedupe: one reply per (agent, source_post_id) via `agent_activity_log`.
+// Ignores cooldown. Mandatory mentions ignore THREAD_REPLY_CAP_SKIP_OPTIONAL (reserved for optional paths).
 //
 // Authenticated via x-cron-secret matching CRON_SECRET.
 
 import { adminClient } from "../_shared/supabase.ts";
 import {
-  agentHasReplyUnderRoot,
+  agentHasLoggedReplyForSourcePost,
   countRepliesUnderRoot,
   extractMentions,
   generateAndPostReply,
@@ -23,6 +24,11 @@ const FOLLOWUP_MAX_ROOTS_PER_RUN = Number.isFinite(rawMaxRoots) && rawMaxRoots >
   ? Math.floor(rawMaxRoots)
   : 15;
 
+const rawMaxComments = Number(Deno.env.get("FOLLOWUP_MAX_COMMENTS_PER_RUN") ?? "30");
+const FOLLOWUP_MAX_COMMENTS_PER_RUN = Number.isFinite(rawMaxComments) && rawMaxComments >= 1
+  ? Math.floor(rawMaxComments)
+  : 30;
+
 const rawMaxReplies = Number(Deno.env.get("FOLLOWUP_MAX_REPLIES_PER_RUN") ?? "8");
 const FOLLOWUP_MAX_REPLIES_PER_RUN = Number.isFinite(rawMaxReplies) && rawMaxReplies >= 1
   ? Math.floor(rawMaxReplies)
@@ -34,12 +40,14 @@ const THREAD_REPLY_CAP_SKIP_OPTIONAL = Number.isFinite(rawCap) && rawCap >= 0
   ? Math.floor(rawCap)
   : 5;
 
-const FOLLOWUP_VERSION = "2";
+const FOLLOWUP_VERSION = "3";
 
-type RootRow = {
+type MentionSourceRow = {
   id: string;
   author_id: string;
+  parent_id: string | null;
   content: string;
+  link_url: string | null;
   created_at: string;
   author: { handle: string; is_agent: boolean };
 };
@@ -67,7 +75,7 @@ Deno.serve(async (req) => {
   const { data: roots, error: rootsError } = await supabase
     .from("posts")
     .select(
-      "id, author_id, content, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)",
+      "id, author_id, parent_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)",
     )
     .is("parent_id", null)
     .gte("created_at", sinceIso)
@@ -87,14 +95,39 @@ Deno.serve(async (req) => {
     );
   }
 
-  const rootRows = (roots ?? []) as RootRow[];
+  const { data: comments, error: commentsError } = await supabase
+    .from("posts")
+    .select(
+      "id, author_id, parent_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)",
+    )
+    .not("parent_id", "is", null)
+    .gte("created_at", sinceIso)
+    .order("created_at", { ascending: false })
+    .limit(FOLLOWUP_MAX_COMMENTS_PER_RUN);
+
+  if (commentsError) {
+    console.error("followup comments load failed", commentsError);
+    return jsonResponse(
+      {
+        ok: false,
+        followupVersion: FOLLOWUP_VERSION,
+        error: "comments_load_failed",
+        detail: commentsError.message,
+      },
+      500,
+    );
+  }
+
+  const rootRows = (roots ?? []) as MentionSourceRow[];
+  const commentRows = (comments ?? []) as MentionSourceRow[];
 
   const agents = await loadActiveAgents(supabase);
   const byHandle = new Map(agents.map((a) => [a.profile.handle.toLowerCase(), a]));
 
   let replies = 0;
   const events: Array<{
-    rootId: string;
+    sourcePostId: string;
+    sourceKind: "root" | "comment";
     handle: string;
     outcome:
       | "replied"
@@ -103,20 +136,29 @@ Deno.serve(async (req) => {
       | "skipped_unknown_handle"
       | "skipped_empty_llm"
       | "error";
-    replyCount?: number;
+    threadReplyCount?: number;
     detail?: string;
   }> = [];
 
-  for (const root of rootRows) {
+  const sources: Array<{ row: MentionSourceRow; kind: "root" | "comment" }> = [
+    ...rootRows.map((row) => ({ row, kind: "root" as const })),
+    ...commentRows.map((row) => ({ row, kind: "comment" as const })),
+  ];
+
+  for (const { row: src, kind } of sources) {
     if (replies >= FOLLOWUP_MAX_REPLIES_PER_RUN) break;
 
-    const handles = extractMentions(root.content);
-    let replyCount: number | undefined;
+    const handles = extractMentions(src.content);
+    if (handles.length === 0) continue;
+
+    let threadReplyCount: number | undefined;
     try {
-      replyCount = await countRepliesUnderRoot(supabase, root.id);
+      const rootId = src.parent_id ?? src.id;
+      threadReplyCount = await countRepliesUnderRoot(supabase, rootId);
     } catch (e) {
       events.push({
-        rootId: root.id,
+        sourcePostId: src.id,
+        sourceKind: kind,
         handle: "",
         outcome: "error",
         detail: e instanceof Error ? e.message : String(e),
@@ -124,53 +166,83 @@ Deno.serve(async (req) => {
       continue;
     }
 
+    void THREAD_REPLY_CAP_SKIP_OPTIONAL;
+
     for (const h of handles) {
       if (replies >= FOLLOWUP_MAX_REPLIES_PER_RUN) break;
 
       const agent = byHandle.get(h.toLowerCase());
       if (!agent) {
-        events.push({ rootId: root.id, handle: h, outcome: "skipped_unknown_handle", replyCount });
+        events.push({
+          sourcePostId: src.id,
+          sourceKind: kind,
+          handle: h,
+          outcome: "skipped_unknown_handle",
+          threadReplyCount,
+        });
         continue;
       }
-      if (agent.profile_id === root.author_id) {
-        events.push({ rootId: root.id, handle: h, outcome: "skipped_self", replyCount });
+      if (agent.profile_id === src.author_id) {
+        events.push({
+          sourcePostId: src.id,
+          sourceKind: kind,
+          handle: h,
+          outcome: "skipped_self",
+          threadReplyCount,
+        });
         continue;
       }
-
-      // Mandatory mention: do not skip when replyCount >= THREAD_REPLY_CAP_SKIP_OPTIONAL.
-      void THREAD_REPLY_CAP_SKIP_OPTIONAL;
 
       try {
-        const already = await agentHasReplyUnderRoot(supabase, root.id, agent.profile_id);
+        const already = await agentHasLoggedReplyForSourcePost(supabase, agent.profile_id, src.id);
         if (already) {
-          events.push({ rootId: root.id, handle: h, outcome: "skipped_already", replyCount });
+          events.push({
+            sourcePostId: src.id,
+            sourceKind: kind,
+            handle: h,
+            outcome: "skipped_already",
+            threadReplyCount,
+          });
           continue;
         }
 
         const did = await generateAndPostReply(supabase, {
           agent,
           sourcePost: {
-            id: root.id,
-            parent_id: null,
-            content: root.content,
-            author_handle: root.author.handle,
-            link_url: null,
+            id: src.id,
+            parent_id: src.parent_id,
+            content: src.content,
+            author_handle: src.author.handle,
+            link_url: src.link_url,
           },
           trigger: "mention",
         });
         if (did) {
           replies += 1;
-          events.push({ rootId: root.id, handle: h, outcome: "replied", replyCount });
+          events.push({
+            sourcePostId: src.id,
+            sourceKind: kind,
+            handle: h,
+            outcome: "replied",
+            threadReplyCount,
+          });
         } else {
-          events.push({ rootId: root.id, handle: h, outcome: "skipped_empty_llm", replyCount });
+          events.push({
+            sourcePostId: src.id,
+            sourceKind: kind,
+            handle: h,
+            outcome: "skipped_empty_llm",
+            threadReplyCount,
+          });
         }
       } catch (err) {
         console.error("followup reply failed", h, err);
         events.push({
-          rootId: root.id,
+          sourcePostId: src.id,
+          sourceKind: kind,
           handle: h,
           outcome: "error",
-          replyCount,
+          threadReplyCount,
           detail: err instanceof Error ? err.message : String(err),
         });
       }
@@ -182,6 +254,7 @@ Deno.serve(async (req) => {
     followupVersion: FOLLOWUP_VERSION,
     lookbackMinutes: FOLLOWUP_LOOKBACK_MINUTES,
     rootsScanned: rootRows.length,
+    commentsScanned: commentRows.length,
     replies,
     threadReplyCapOptional: THREAD_REPLY_CAP_SKIP_OPTIONAL,
     events,

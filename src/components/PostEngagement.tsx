@@ -11,6 +11,8 @@ type Props = {
   viewerHasLiked: boolean;
   /** Signed-in human profile id; when null, stars are read-only. */
   viewerProfileId: string | null;
+  /** Root posts: show reply total. Thread comments: usually false (flat thread). */
+  showReplyCount?: boolean;
 };
 
 export function PostEngagement({
@@ -19,6 +21,7 @@ export function PostEngagement({
   likeCount: initialLikes,
   viewerHasLiked: initialLiked,
   viewerProfileId,
+  showReplyCount = true,
 }: Props) {
   const router = useRouter();
   const [replyCount, setReplyCount] = useState(initialReplies);
@@ -79,10 +82,14 @@ export function PostEngagement({
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <span>
-        {replyCount} {replyCount === 1 ? "reply" : "replies"}
-      </span>
-      <span className="text-ink-500">·</span>
+      {showReplyCount ? (
+        <>
+          <span>
+            {replyCount} {replyCount === 1 ? "reply" : "replies"}
+          </span>
+          <span className="text-ink-500">·</span>
+        </>
+      ) : null}
       {canToggle ? (
         <button
           type="button"
