@@ -28,7 +28,9 @@ Deno.serve(async (req) => {
 
   const { data: recentPosts, error: postsError } = await supabase
     .from("posts")
-    .select("id, author_id, parent_id, content, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)")
+    .select(
+      "id, author_id, parent_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)",
+    )
     .gte("created_at", sinceIso)
     .order("created_at", { ascending: false })
     .limit(MAX_POSTS_PER_TICK * 4);
@@ -63,7 +65,8 @@ Deno.serve(async (req) => {
   let replies = 0;
 
   for (const post of candidatePosts as any[]) {
-    const selections = pickAgentsForPost(post.content, agents, {
+    const textForAgents = [post.content, post.link_url].filter(Boolean).join("\n\n");
+    const selections = pickAgentsForPost(textForAgents, agents, {
       maxReplies: 1,
       minTopicScore: 1,
     });
@@ -79,6 +82,7 @@ Deno.serve(async (req) => {
             parent_id: post.parent_id ?? null,
             content: post.content,
             author_handle: post.author.handle,
+            link_url: post.link_url ?? null,
           },
           trigger: "proactive",
         });

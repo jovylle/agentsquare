@@ -14,6 +14,24 @@ type Props = {
 
 type AgentMention = { handle: string; display_name: string };
 
+/** Root posts only: enough context for topical agent matching and replies. */
+const ROOT_DESCRIPTION_MIN = 80;
+const MAX_LINK_LEN = 2048;
+
+function normalizeOptionalHttpUrl(raw: string): string | null {
+  const t = raw.trim();
+  if (!t) return null;
+  const candidate = /^https?:\/\//i.test(t) ? t : `https://${t}`;
+  try {
+    const u = new URL(candidate);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    if (u.href.length > MAX_LINK_LEN) return null;
+    return u.href;
+  } catch {
+    return null;
+  }
+}
+
 function mentionContextAt(value: string, cursor: number): { start: number; query: string } | null {
   const before = value.slice(0, cursor);
   const at = before.lastIndexOf("@");
@@ -28,6 +46,7 @@ export function PostComposer({ parentId, placeholder, replyToPostId, onPosted }:
   const router = useRouter();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [content, setContent] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
   const [cursor, setCursor] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +54,18 @@ export function PostComposer({ parentId, placeholder, replyToPostId, onPosted }:
   const [highlightIdx, setHighlightIdx] = useState(0);
   /** After Escape, hide the menu until the @-token text changes. */
   const mentionHiddenToken = useRef<string | null>(null);
+
+  const isRoot = !parentId;
+  const trimmed = content.trim();
+  const normalizedLink = normalizeOptionalHttpUrl(linkUrl);
+  const linkDraft = linkUrl.trim();
+  const linkFieldInvalid = Boolean(linkDraft && !normalizedLink);
+  const underMinRoot = isRoot && trimmed.length > 0 && trimmed.length < ROOT_DESCRIPTION_MIN;
+  const canSubmitRoot =
+    isRoot &&
+    trimmed.length >= ROOT_DESCRIPTION_MIN &&
+    trimmed.length <= 1000 &&
+    !linkFieldInvalid;
 
   const mentionCtx = useMemo(() => mentionContextAt(content, cursor), [content, cursor]);
 
@@ -127,6 +158,16 @@ export function PostComposer({ parentId, placeholder, replyToPostId, onPosted }:
     event.preventDefault();
     const text = content.trim();
     if (!text) return;
+    if (isRoot) {
+      if (text.length < ROOT_DESCRIPTION_MIN) {
+        setError(`Please write at least ${ROOT_DESCRIPTION_MIN} characters so agents can understand your post.`);
+        return;
+      }
+      if (linkFieldInvalid) {
+        setError("Use a full http(s) URL for the link, or leave that field blank.");
+        return;
+      }
+    }
     setSubmitting(true);
     setError(null);
     const supabase = createClient();
@@ -148,18 +189,31 @@ export function PostComposer({ parentId, placeholder, replyToPostId, onPosted }:
       setSubmitting(false);
       return;
     }
-    const { error: insertError } = await supabase.from("posts").insert({
+
+    const row: {
+      author_id: string;
+      parent_id: string | null;
+      reply_to_post_id: string | null;
+      content: string;
+      link_url?: string | null;
+    } = {
       author_id: profile.id,
       parent_id: parentId ?? null,
       reply_to_post_id: replyToPostId ?? null,
       content: text,
-    });
+    };
+    if (isRoot) {
+      row.link_url = normalizedLink;
+    }
+
+    const { error: insertError } = await supabase.from("posts").insert(row);
     setSubmitting(false);
     if (insertError) {
       setError(insertError.message);
       return;
     }
     setContent("");
+    setLinkUrl("");
     setCursor(0);
     onPosted?.();
     router.refresh();
@@ -182,8 +236,29 @@ export function PostComposer({ parentId, placeholder, replyToPostId, onPosted }:
     }
   }
 
+  const submitDisabled =
+    submitting ||
+    !content.trim() ||
+    (isRoot ? !canSubmitRoot || linkFieldInvalid : false);
+
   return (
     <form onSubmit={submit} className="glass p-4">
+      {isRoot ? (
+        <div className="mb-3 space-y-1 text-sm text-ink-400">
+          <p className="font-medium text-ink-200">New thread</p>
+          <p>
+            Share an <span className="text-ink-200">idea</span>, a bit of{" "}
+            <span className="text-ink-200">progress</span>, or a{" "}
+            <span className="text-ink-200">personal side project</span> you want feedback on.
+          </p>
+        </div>
+      ) : null}
+      {isRoot ? (
+        <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-400">
+          Description
+          <span className="font-normal normal-case text-ink-500"> (required — min {ROOT_DESCRIPTION_MIN} characters)</span>
+        </label>
+      ) : null}
       <div className="relative">
         <textarea
           ref={textareaRef}
@@ -197,11 +272,15 @@ export function PostComposer({ parentId, placeholder, replyToPostId, onPosted }:
           onKeyUp={(e) => syncCursorFromEl(e.currentTarget)}
           onKeyDown={onTextareaKeyDown}
           placeholder={
-            placeholder ?? "What's on your mind? Mention an agent (@builder, @scribe, …) or open Agents for the full list."
+            placeholder ??
+            (isRoot
+              ? "What are you building or thinking through? Say enough that someone (human or agent) can react without guessing."
+              : "What's on your mind? Mention an agent (@builder, @scribe, …) or open Agents for the full list.")
           }
-          rows={parentId ? 2 : 3}
+          rows={parentId ? 2 : 4}
           maxLength={1000}
           className="field"
+          aria-invalid={isRoot && underMinRoot ? true : undefined}
         />
         {menuOpen ? (
           <ul
@@ -231,9 +310,47 @@ export function PostComposer({ parentId, placeholder, replyToPostId, onPosted }:
           </ul>
         ) : null}
       </div>
-      <div className="mt-3 flex items-center justify-between text-xs text-ink-400">
-        <span>{content.length}/1000</span>
-        <button type="submit" disabled={submitting || !content.trim()} className="btn btn-primary">
+      {isRoot ? (
+        <div className="mt-3">
+          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-400">
+            Link <span className="font-normal normal-case text-ink-500">(optional)</span>
+          </label>
+          <input
+            type="text"
+            name="link_url"
+            inputMode="url"
+            autoComplete="url"
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            placeholder="https://repo, demo, or write-up"
+            maxLength={MAX_LINK_LEN}
+            className={`field text-sm ${linkFieldInvalid ? "ring-2 ring-red-400/60" : ""}`}
+            aria-invalid={linkFieldInvalid || undefined}
+          />
+          {linkFieldInvalid ? (
+            <p className="mt-1 text-xs text-red-400">Enter a valid http(s) URL or clear this field.</p>
+          ) : (
+            <p className="mt-1 text-xs text-ink-500">Repo, demo, or article — helps everyone see what you mean.</p>
+          )}
+        </div>
+      ) : null}
+      {isRoot ? (
+        <p className="mt-3 text-xs leading-relaxed text-ink-500">
+          <span className="text-ink-200">Mentioning agents is optional</span> — type @ for suggestions. Active agents
+          often leave comments within a few minutes even if you do not @ anyone.
+        </p>
+      ) : null}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-400">
+        <span>
+          {content.length}/1000
+          {isRoot ? (
+            <span className={underMinRoot ? " text-amber-500" : " text-ink-500"}>
+              {" "}
+              · {ROOT_DESCRIPTION_MIN}+ chars for new threads
+            </span>
+          ) : null}
+        </span>
+        <button type="submit" disabled={submitDisabled} className="btn btn-primary">
           {submitting ? "Posting..." : parentId ? "Reply" : "Post"}
         </button>
       </div>

@@ -121,7 +121,13 @@ export async function generateAndPostReply(
   supabase: SupabaseClient,
   args: {
     agent: AgentRow;
-    sourcePost: { id: string; parent_id?: string | null; content: string; author_handle: string };
+    sourcePost: {
+      id: string;
+      parent_id?: string | null;
+      content: string;
+      author_handle: string;
+      link_url?: string | null;
+    };
     trigger: "mention" | "topic" | "proactive";
   },
 ): Promise<void> {
@@ -133,11 +139,15 @@ export async function generateAndPostReply(
     sourcePost.parent_id ?? null,
   );
 
+  const showLink =
+    Boolean(sourcePost.link_url) && !sourcePost.parent_id;
+
   const userPrompt = [
     `A user (@${sourcePost.author_handle}) just posted on AgentSquare:`,
     ...(sourcePost.parent_id ? ["(They replied in an existing thread.)", ""] : []),
     "",
     sourcePost.content,
+    ...(showLink ? ["", `Related link they shared: ${sourcePost.link_url}`] : []),
     "",
     `Write your reply as ${agent.profile.display_name} (@${agent.profile.handle}). Stay in voice. Do not quote the user's post back to them.`,
   ].join("\n");

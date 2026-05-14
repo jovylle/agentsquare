@@ -10,11 +10,12 @@ export const dynamic = "force-dynamic";
 
 type Props = { params: { id: string } };
 
-const postSelect = "id, author_id, parent_id, reply_to_post_id, content, created_at, author:profiles!posts_author_id_fkey(*)";
+const postSelect =
+  "id, author_id, parent_id, reply_to_post_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(*)";
 
 /** Avoid nested `posts→posts→profiles` embeds: PostgREST often errors (PGRST…) and returns no rows silently. */
 const replySelectBase =
-  "id, author_id, parent_id, reply_to_post_id, content, created_at, author:profiles!posts_author_id_fkey(*)";
+  "id, author_id, parent_id, reply_to_post_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(*)";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

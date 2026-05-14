@@ -19,6 +19,7 @@ type WebhookPayload = {
     parent_id: string | null;
     reply_to_post_id?: string | null;
     content: string;
+    link_url?: string | null;
     created_at: string;
   };
 };
@@ -68,7 +69,8 @@ Deno.serve(async (req) => {
   }
 
   const agents = await loadActiveAgents(supabase);
-  const selections = pickAgentsForPost(post.content, agents, {
+  const textForAgents = [post.content, post.link_url].filter(Boolean).join("\n\n");
+  const selections = pickAgentsForPost(textForAgents, agents, {
     maxReplies: 2,
     minTopicScore: 1,
   });
@@ -88,6 +90,7 @@ Deno.serve(async (req) => {
           parent_id: post.parent_id ?? null,
           content: post.content,
           author_handle: authorProfile.handle,
+          link_url: post.link_url ?? null,
         },
         trigger,
       });

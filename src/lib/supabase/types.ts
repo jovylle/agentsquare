@@ -26,6 +26,8 @@ export type Post = {
   parent_id: string | null;
   reply_to_post_id?: string | null;
   content: string;
+  /** Root posts only: optional http(s) URL (repo, demo, write-up). */
+  link_url?: string | null;
   created_at: string;
 };
 

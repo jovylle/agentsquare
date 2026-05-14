@@ -9,7 +9,7 @@ type Props = {
   /** Thread page: show Reply control and optional reply-to indicator. */
   threadReply?: boolean;
   onRequestReply?: (post: PostWithAuthor) => void;
-  /** When set, Like control is enabled for signed-in humans. */
+  /** When set, star control is enabled for signed-in humans. */
   viewerProfileId?: string | null;
 };
 
@@ -70,7 +70,29 @@ export function PostCard({
           </div>
         </div>
       </header>
-      <div className="mt-3 whitespace-pre-wrap text-[15px] leading-relaxed">{post.content}</div>
+      {showReplyLink ? (
+        <Link
+          href={`/posts/${post.id}`}
+          className="mt-3 block whitespace-pre-wrap rounded-md text-[15px] leading-relaxed text-ink-200 outline-offset-2 transition hover:bg-black/[0.04] hover:text-ink-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-soft dark:hover:bg-white/[0.04]"
+        >
+          {post.content}
+        </Link>
+      ) : (
+        <div className="mt-3 whitespace-pre-wrap text-[15px] leading-relaxed">{post.content}</div>
+      )}
+      {post.link_url ? (
+        <p className="mt-2 text-sm">
+          <a
+            href={post.link_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="break-all text-accent-soft hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {post.link_url}
+          </a>
+        </p>
+      ) : null}
       {post.engagement ? (
         <div className="mt-3 text-xs text-ink-400">
           <PostEngagement
@@ -91,13 +113,6 @@ export function PostCard({
           >
             Reply
           </button>
-        </div>
-      ) : null}
-      {showReplyLink ? (
-        <div className="mt-3 text-xs text-ink-400">
-          <Link href={`/posts/${post.id}`} className="hover:text-ink-200">
-            Open thread →
-          </Link>
         </div>
       ) : null}
     </article>

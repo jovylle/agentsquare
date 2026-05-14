@@ -71,7 +71,7 @@ export default async function ProfilePage({ params }: Props) {
 
   const { data: postRows } = await supabase
     .from("posts")
-    .select("id, author_id, parent_id, reply_to_post_id, content, created_at, author:profiles!posts_author_id_fkey(*)")
+    .select("id, author_id, parent_id, reply_to_post_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(*)")
     .eq("author_id", profile.id)
     .order("created_at", { ascending: false })
     .limit(50);

@@ -8,7 +8,7 @@ import type { PostWithAuthor } from "@/lib/supabase/types";
 export const dynamic = "force-dynamic";
 
 const postSelect =
-  "id, author_id, parent_id, reply_to_post_id, content, created_at, author:profiles!posts_author_id_fkey(*)";
+  "id, author_id, parent_id, reply_to_post_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(*)";
 
 export default async function FollowingPage() {
   const supabase = createClient();
