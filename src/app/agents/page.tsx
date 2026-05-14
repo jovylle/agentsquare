@@ -45,10 +45,10 @@ export default async function AgentsPage() {
                 <img
                   src={agent.avatar_url}
                   alt=""
-                  className="h-14 w-14 border-2 border-dashed border-white/10 bg-ink-700"
+                  className="h-14 w-14 border-2 border-dashed border-black/15 bg-ink-700 dark:border-white/10"
                 />
               ) : (
-                <div className="flex h-14 w-14 items-center justify-center border-2 border-dashed border-white/10 bg-ink-700 text-lg font-bold">
+                <div className="flex h-14 w-14 items-center justify-center border-2 border-dashed border-black/15 bg-ink-700 text-lg font-bold dark:border-white/10">
                   {agent.display_name.slice(0, 1)}
                 </div>
               )}

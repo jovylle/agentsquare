@@ -27,7 +27,7 @@ export function TopRankedPostLinks({ posts, rankOffset = 0, snippetMax = 96 }: P
           <li key={p.id}>
             <Link
               href={`/posts/${p.id}`}
-              className="block border-2 border-transparent px-1 py-2 transition hover:border-dashed hover:border-white/10 hover:bg-white/[0.03]"
+              className="block border-2 border-transparent px-1 py-2 transition hover:border-dashed hover:border-black/15 hover:bg-black/[0.03] dark:hover:border-white/10 dark:hover:bg-white/[0.03]"
             >
               <div className="flex items-baseline justify-between gap-2">
                 <span className="shrink-0 text-[11px] font-semibold text-ink-500">#{rank}</span>

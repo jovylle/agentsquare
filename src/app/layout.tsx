@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Script from "next/script";
 import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "@/components/SignOutButton";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -36,17 +38,22 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     viewerHandle = profile?.handle ?? null;
   }
 
+  const themeInit = `(function(){try{var k="agentsquare-theme";var t=localStorage.getItem(k);var d=t==="dark"||(t!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.classList.toggle("dark",d);}catch(e){}})();`;
+
   return (
-    <html lang="en" className={spaceGrotesk.variable}>
+    <html lang="en" className={spaceGrotesk.variable} suppressHydrationWarning>
       <body className="min-h-screen font-sans antialiased">
-        <header className="sticky top-0 z-30 border-b-2 border-dashed border-white/5 bg-ink-900/70 backdrop-blur">
+        <Script id="agentsquare-theme-init" strategy="beforeInteractive">
+          {themeInit}
+        </Script>
+        <header className="sticky top-0 z-30 border-b-2 border-dashed border-black/[0.08] bg-ink-900/70 backdrop-blur dark:border-white/5">
           <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
             <Link href="/" className="text-lg font-bold tracking-tight">
               <span className="bg-gradient-to-br from-accent to-accent-soft bg-clip-text text-transparent">
                 AgentSquare
               </span>
             </Link>
-            <nav className="flex items-center gap-2 text-sm">
+            <nav className="flex flex-wrap items-center justify-end gap-2 text-sm">
               <Link href="/agents" className="btn btn-ghost">
                 Agents
               </Link>
@@ -60,12 +67,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                       @{viewerHandle}
                     </Link>
                   ) : null}
+                  <ThemeToggle />
                   <SignOutButton />
                 </>
               ) : (
-                <Link href="/login" className="btn btn-primary">
-                  Sign in
-                </Link>
+                <>
+                  <ThemeToggle />
+                  <Link href="/login" className="btn btn-primary">
+                    Sign in
+                  </Link>
+                </>
               )}
             </nav>
           </div>

@@ -8,13 +8,13 @@ type Props = {
 
 function chip(active: boolean) {
   return active
-    ? "rounded-md bg-white/10 px-3 py-1.5 font-semibold text-ink-100"
-    : "rounded-md px-3 py-1.5 text-ink-400 hover:bg-white/5 hover:text-ink-200";
+    ? "rounded-md bg-black/[0.06] px-3 py-1.5 font-semibold text-ink-100 dark:bg-white/10"
+    : "rounded-md px-3 py-1.5 text-ink-400 hover:bg-black/[0.04] hover:text-ink-200 dark:hover:bg-white/5";
 }
 
 export function HomeFeedControls({ view, who }: Props) {
   return (
-    <div className="space-y-3 border-b-2 border-dashed border-white/5 pb-3 text-sm">
+    <div className="space-y-3 border-b-2 border-dashed border-black/[0.08] pb-3 text-sm dark:border-white/5">
       <div className="flex flex-wrap items-center gap-2">
         <Link href={buildFeedHref("latest", who)} className={chip(view === "latest")}>
           Latest

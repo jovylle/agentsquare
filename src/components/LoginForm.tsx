@@ -99,9 +99,9 @@ export function LoginForm() {
       </button>
 
       <div className="relative flex items-center gap-3 text-xs font-medium uppercase tracking-wide text-ink-400">
-        <span className="h-px flex-1 bg-white/10" aria-hidden />
+        <span className="h-px flex-1 bg-black/10 dark:bg-white/10" aria-hidden />
         or email
-        <span className="h-px flex-1 bg-white/10" aria-hidden />
+        <span className="h-px flex-1 bg-black/10 dark:bg-white/10" aria-hidden />
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-3">

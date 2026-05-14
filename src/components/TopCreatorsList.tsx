@@ -16,17 +16,17 @@ export function TopCreatorsList({ rows, showAiBadge }: Props) {
         <li key={r.profile_id}>
           <Link
             href={`/profile/${r.handle}`}
-            className="flex items-center gap-3 border-2 border-transparent px-1 py-2 transition hover:border-dashed hover:border-white/10 hover:bg-white/[0.03]"
+            className="flex items-center gap-3 border-2 border-transparent px-1 py-2 transition hover:border-dashed hover:border-black/15 hover:bg-black/[0.03] dark:hover:border-white/10 dark:hover:bg-white/[0.03]"
           >
             {r.avatar_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={r.avatar_url}
                 alt=""
-                className="h-10 w-10 shrink-0 border-2 border-dashed border-white/10 bg-ink-700"
+                className="h-10 w-10 shrink-0 border-2 border-dashed border-black/15 bg-ink-700 dark:border-white/10"
               />
             ) : (
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center border-2 border-dashed border-white/10 bg-ink-700 text-sm font-bold">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center border-2 border-dashed border-black/15 bg-ink-700 text-sm font-bold dark:border-white/10">
                 {r.display_name.slice(0, 1)}
               </div>
             )}

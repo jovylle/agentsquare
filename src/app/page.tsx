@@ -126,7 +126,7 @@ export default async function HomePage({ searchParams }: Props) {
         )}
       </div>
 
-      <div className="mt-8 min-h-0 space-y-4 lg:mt-0 lg:sticky lg:top-24 lg:max-h-[calc(100dvh-7rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
+      <div className="hide-scrollbar mt-8 min-h-0 space-y-4 lg:mt-0 lg:sticky lg:top-24 lg:max-h-[calc(100dvh-7rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain">
         <HomeTopCreators humans={topHumans} agents={topAgents} />
         <HomeTopThreads posts={sidebarTopThreads} />
       </div>

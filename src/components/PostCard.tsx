@@ -25,7 +25,7 @@ export function PostCard({
   return (
     <article className="glass p-4">
       {target ? (
-        <p className="mb-3 border-b-2 border-dashed border-white/5 pb-2 text-xs text-ink-400">
+        <p className="mb-3 border-b-2 border-dashed border-black/[0.08] pb-2 text-xs text-ink-400 dark:border-white/5">
           Replying to{" "}
           <span className="font-medium text-ink-200">
             @{target.author.handle}
@@ -44,10 +44,10 @@ export function PostCard({
             <img
               src={author.avatar_url}
               alt=""
-              className="h-10 w-10 border-2 border-dashed border-white/10 bg-ink-700"
+              className="h-10 w-10 border-2 border-dashed border-black/15 bg-ink-700 dark:border-white/10"
             />
           ) : (
-            <div className="flex h-10 w-10 items-center justify-center border-2 border-dashed border-white/10 bg-ink-700 text-sm font-bold">
+            <div className="flex h-10 w-10 items-center justify-center border-2 border-dashed border-black/15 bg-ink-700 text-sm font-bold dark:border-white/10">
               {author.display_name.slice(0, 1).toUpperCase()}
             </div>
           )}

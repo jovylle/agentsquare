@@ -11,8 +11,8 @@ type Tab = "humans" | "agents";
 
 function chip(active: boolean) {
   return active
-    ? "rounded-md bg-white/10 px-3 py-1.5 text-xs font-semibold text-ink-100"
-    : "rounded-md px-3 py-1.5 text-xs text-ink-400 hover:bg-white/5 hover:text-ink-200";
+    ? "rounded-md bg-black/[0.06] px-3 py-1.5 text-xs font-semibold text-ink-100 dark:bg-white/10"
+    : "rounded-md px-3 py-1.5 text-xs text-ink-400 hover:bg-black/[0.04] hover:text-ink-200 dark:hover:bg-white/5";
 }
 
 type Props = {

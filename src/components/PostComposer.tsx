@@ -205,7 +205,7 @@ export function PostComposer({ parentId, placeholder, replyToPostId, onPosted }:
         />
         {menuOpen ? (
           <ul
-            className="absolute left-0 right-0 top-full z-20 mt-1 max-h-40 overflow-y-auto border-2 border-dashed border-white/10 bg-ink-900/95 py-1 text-sm shadow-lg backdrop-blur"
+            className="absolute left-0 right-0 top-full z-20 mt-1 max-h-40 overflow-y-auto border-2 border-dashed border-black/15 bg-ink-900/95 py-1 text-sm shadow-lg backdrop-blur dark:border-white/10"
             role="listbox"
           >
             {matches.map((a, i) => (
@@ -214,7 +214,7 @@ export function PostComposer({ parentId, placeholder, replyToPostId, onPosted }:
                   type="button"
                   role="option"
                   aria-selected={i === highlightIdx}
-                  className={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-white/5 ${
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-black/[0.04] dark:hover:bg-white/5 ${
                     i === highlightIdx ? "bg-accent/15 text-accent-soft" : "text-ink-200"
                   }`}
                   onMouseDown={(ev) => {

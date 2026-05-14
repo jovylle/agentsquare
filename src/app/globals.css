@@ -2,15 +2,64 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Light (default): remap steps so text/bg utilities stay readable in both themes. */
 :root {
+  color-scheme: light;
+  --tw-ink-50: 252 252 255;
+  --tw-ink-100: 16 19 31;
+  --tw-ink-200: 27 31 51;
+  --tw-ink-300: 42 47 75;
+  --tw-ink-400: 82 90 131;
+  --tw-ink-500: 122 130 168;
+  --tw-ink-600: 154 162 195;
+  --tw-ink-700: 214 218 233;
+  --tw-ink-800: 230 232 242;
+  --tw-ink-900: 247 247 251;
+
+  --page-bg-0: #eef0fb;
+  --page-bg-1: #e4e7f5;
+  --page-fg: #10131f;
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(16, 19, 31, 0.12);
+  --btn-ghost-bg: rgba(16, 19, 31, 0.04);
+  --btn-ghost-bg-hover: rgba(16, 19, 31, 0.08);
+  --btn-ghost-fg: var(--page-fg);
+  --field-bg: rgba(255, 255, 255, 0.85);
+  --field-border: rgba(16, 19, 31, 0.12);
+  --field-fg: var(--page-fg);
+}
+
+:root.dark {
   color-scheme: dark;
+  --tw-ink-50: 247 247 251;
+  --tw-ink-100: 236 238 246;
+  --tw-ink-200: 214 218 233;
+  --tw-ink-300: 174 180 207;
+  --tw-ink-400: 122 130 168;
+  --tw-ink-500: 82 90 131;
+  --tw-ink-600: 59 66 103;
+  --tw-ink-700: 42 47 75;
+  --tw-ink-800: 27 31 51;
+  --tw-ink-900: 16 19 31;
+
+  --page-bg-0: #1b1f33;
+  --page-bg-1: #10131f;
+  --page-fg: #eceef6;
+  --glass-bg: rgba(27, 31, 51, 0.55);
+  --glass-border: rgba(214, 218, 233, 0.12);
+  --btn-ghost-bg: rgba(214, 218, 233, 0.05);
+  --btn-ghost-bg-hover: rgba(214, 218, 233, 0.1);
+  --btn-ghost-fg: #eceef6;
+  --field-bg: rgba(16, 19, 31, 0.6);
+  --field-border: rgba(214, 218, 233, 0.12);
+  --field-fg: #eceef6;
 }
 
 html,
 body {
   height: 100%;
-  background: radial-gradient(circle at top, #1b1f33 0%, #10131f 60%);
-  color: #eceef6;
+  background: radial-gradient(circle at top, var(--page-bg-0) 0%, var(--page-bg-1) 60%);
+  color: var(--page-fg);
 }
 
 body {
@@ -18,8 +67,8 @@ body {
 }
 
 .glass {
-  background: rgba(27, 31, 51, 0.55);
-  border: 2px dashed rgba(214, 218, 233, 0.12);
+  background: var(--glass-bg);
+  border: 2px dashed var(--glass-border);
   border-radius: 0;
   backdrop-filter: blur(14px);
 }
@@ -30,7 +79,7 @@ body {
   justify-content: center;
   gap: 0.5rem;
   padding: 0.55rem 1rem;
-  border: 2px dashed rgba(214, 218, 233, 0.18);
+  border: 2px dashed rgba(124, 92, 255, 0.35);
   border-radius: 0;
   font-weight: 600;
   font-size: 0.9rem;
@@ -49,20 +98,21 @@ body {
   transform: translateY(-1px);
 }
 .btn-ghost {
-  background: rgba(214, 218, 233, 0.05);
-  color: #eceef6;
+  background: var(--btn-ghost-bg);
+  color: var(--btn-ghost-fg);
+  border-color: var(--glass-border);
 }
 .btn-ghost:hover:not(:disabled) {
-  background: rgba(214, 218, 233, 0.1);
+  background: var(--btn-ghost-bg-hover);
 }
 
 .field {
   width: 100%;
-  background: rgba(16, 19, 31, 0.6);
-  border: 2px dashed rgba(214, 218, 233, 0.12);
+  background: var(--field-bg);
+  border: 2px dashed var(--field-border);
   border-radius: 0;
   padding: 0.75rem 1rem;
-  color: #eceef6;
+  color: var(--field-fg);
   font-size: 0.95rem;
   resize: none;
 }
@@ -70,4 +120,13 @@ body {
   outline: none;
   border-color: rgba(124, 92, 255, 0.6);
   box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.2);
+}
+
+/* Scrollable regions where the track should stay invisible (wheel / touch still works). */
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
 }
