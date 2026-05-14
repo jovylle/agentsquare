@@ -18,7 +18,7 @@ const TICK_CANDIDATE_POOL = Number.isFinite(rawPool) && rawPool >= MAX_POSTS_PER
   ? Math.floor(rawPool)
   : Math.max(200, MAX_POSTS_PER_TICK);
 
-const TICK_VERSION = "1";
+const TICK_VERSION = "2";
 
 type PostRow = {
   id: string;
@@ -38,6 +38,16 @@ type PerPostOutcome =
   | "skipped_cooldown"
   | "skipped_empty_llm"
   | "error";
+
+/** When no agent interests match the post, still pick one agent (random order) so generic human posts get replies. */
+function shuffle<T>(items: T[]): T[] {
+  const arr = [...items];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -179,6 +189,8 @@ Deno.serve(async (req) => {
     replyCount: number;
     tier: PerPostTier;
     outcome: PerPostOutcome;
+    /** topic_match = min interest score met; fallback_any = no match, random agent among non-mentioned */
+    selectionSource?: "topic_match" | "fallback_any";
     agentHandle?: string;
     errorMessage?: string;
   }> = [];
@@ -193,10 +205,18 @@ Deno.serve(async (req) => {
       : "has_replies";
 
     const textForAgents = [post.content, post.link_url].filter(Boolean).join("\n\n");
-    const selections = pickAgentsForPost(textForAgents, agents, {
+    let selectionSource: "topic_match" | "fallback_any" = "topic_match";
+    let selections = pickAgentsForPost(textForAgents, agents, {
       maxReplies: 1,
       minTopicScore: 1,
     });
+    if (selections.length === 0) {
+      selectionSource = "fallback_any";
+      selections = pickAgentsForPost(textForAgents, shuffle(agents), {
+        maxReplies: 1,
+        minTopicScore: 0,
+      });
+    }
 
     if (selections.length === 0) {
       perPost.push({ postId: post.id, replyCount, tier, outcome: "skipped_no_agent" });
@@ -232,6 +252,7 @@ Deno.serve(async (req) => {
             replyCount,
             tier,
             outcome: "replied",
+            selectionSource,
             agentHandle: agent.profile.handle,
           });
           break;
@@ -245,6 +266,7 @@ Deno.serve(async (req) => {
           replyCount,
           tier,
           outcome: "error",
+          selectionSource,
           errorMessage: caughtError,
         });
         break;
@@ -254,7 +276,7 @@ Deno.serve(async (req) => {
     if (posted || caughtError) continue;
 
     if (hadSilentLlm) {
-      perPost.push({ postId: post.id, replyCount, tier, outcome: "skipped_empty_llm" });
+      perPost.push({ postId: post.id, replyCount, tier, outcome: "skipped_empty_llm", selectionSource });
       continue;
     }
 
@@ -262,7 +284,7 @@ Deno.serve(async (req) => {
       touched.has(`${agent.profile_id}:${post.id}`)
     );
     if (allTouched) {
-      perPost.push({ postId: post.id, replyCount, tier, outcome: "skipped_touched" });
+      perPost.push({ postId: post.id, replyCount, tier, outcome: "skipped_touched", selectionSource });
       continue;
     }
 
@@ -270,11 +292,11 @@ Deno.serve(async (req) => {
       touched.has(`${agent.profile_id}:${post.id}`) || isOnCooldown(agent)
     );
     if (allBlockedByCooldown) {
-      perPost.push({ postId: post.id, replyCount, tier, outcome: "skipped_cooldown" });
+      perPost.push({ postId: post.id, replyCount, tier, outcome: "skipped_cooldown", selectionSource });
       continue;
     }
 
-    perPost.push({ postId: post.id, replyCount, tier, outcome: "skipped_no_agent" });
+    perPost.push({ postId: post.id, replyCount, tier, outcome: "skipped_no_agent", selectionSource });
   }
 
   return jsonResponse({
