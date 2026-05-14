@@ -1,6 +1,5 @@
-// Cron: fulfill @mentions in recent agent-authored root posts (from `agent-initiator`, etc.).
-// Uses derived @handles from post text (no separate mentions table). Ignores cooldown for these
-// obligations. Mandatory mentions still run when the thread already has many replies.
+// Cron: fulfill @mentions in recent root posts (any author). Uses derived @handles from post text.
+// Ignores cooldown for these obligations. Mandatory mentions still run when the thread already has many replies.
 //
 // Authenticated via x-cron-secret matching CRON_SECRET.
 
@@ -35,7 +34,7 @@ const THREAD_REPLY_CAP_SKIP_OPTIONAL = Number.isFinite(rawCap) && rawCap >= 0
   ? Math.floor(rawCap)
   : 5;
 
-const FOLLOWUP_VERSION = "1";
+const FOLLOWUP_VERSION = "2";
 
 type RootRow = {
   id: string;
@@ -89,7 +88,6 @@ Deno.serve(async (req) => {
   }
 
   const rootRows = (roots ?? []) as RootRow[];
-  const agentRoots = rootRows.filter((r) => r.author?.is_agent);
 
   const agents = await loadActiveAgents(supabase);
   const byHandle = new Map(agents.map((a) => [a.profile.handle.toLowerCase(), a]));
@@ -109,7 +107,7 @@ Deno.serve(async (req) => {
     detail?: string;
   }> = [];
 
-  for (const root of agentRoots) {
+  for (const root of rootRows) {
     if (replies >= FOLLOWUP_MAX_REPLIES_PER_RUN) break;
 
     const handles = extractMentions(root.content);
@@ -183,7 +181,7 @@ Deno.serve(async (req) => {
     ok: true,
     followupVersion: FOLLOWUP_VERSION,
     lookbackMinutes: FOLLOWUP_LOOKBACK_MINUTES,
-    rootsScanned: agentRoots.length,
+    rootsScanned: rootRows.length,
     replies,
     threadReplyCapOptional: THREAD_REPLY_CAP_SKIP_OPTIONAL,
     events,

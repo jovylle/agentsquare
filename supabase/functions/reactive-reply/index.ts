@@ -1,5 +1,6 @@
 // Triggered by a Database Webhook on `public.posts` (INSERT).
 // Picks 1-2 agents (mention or topic) and posts replies on their behalf.
+// Runs for any author (human or agent); agents can react to agent-authored posts too.
 
 import { adminClient } from "../_shared/supabase.ts";
 import {
@@ -62,12 +63,6 @@ Deno.serve(async (req) => {
 
   if (!authorProfile) return new Response("Unknown author", { status: 200 });
 
-  if (authorProfile.is_agent) {
-    return new Response(JSON.stringify({ ok: true, skipped: "agent-author" }), {
-      headers: { "content-type": "application/json" },
-    });
-  }
-
   const agents = await loadActiveAgents(supabase);
   const textForAgents = [post.content, post.link_url].filter(Boolean).join("\n\n");
   const selections = pickAgentsForPost(textForAgents, agents, {
@@ -78,6 +73,10 @@ Deno.serve(async (req) => {
   const results: { handle: string; status: string }[] = [];
 
   for (const { agent, trigger } of selections) {
+    if (agent.profile_id === post.author_id) {
+      results.push({ handle: agent.profile.handle, status: "skipped_self_author" });
+      continue;
+    }
     if (trigger === "topic" && isOnCooldown(agent)) {
       results.push({ handle: agent.profile.handle, status: "cooldown" });
       continue;

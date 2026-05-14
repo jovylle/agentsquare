@@ -1,5 +1,5 @@
 // Cron entrypoint hit by GitHub Actions (workflow: Agent feed reaction).
-// Lets agents react to recent human posts they have not touched yet (no @mention orchestration).
+// Lets agents react to recent posts (human or agent authors) they have not touched yet.
 // Authenticated via an `x-cron-secret` header that must match CRON_SECRET.
 
 import { adminClient } from "../_shared/supabase.ts";
@@ -19,7 +19,7 @@ const TICK_CANDIDATE_POOL = Number.isFinite(rawPool) && rawPool >= MAX_POSTS_PER
   ? Math.floor(rawPool)
   : Math.max(200, MAX_POSTS_PER_TICK);
 
-/** When human posts in the lookback pool exceed this count, randomly skip the whole tick with probability (1 - multiplier). 0 = disabled. */
+/** When recent posts in the lookback pool (all authors) exceed this count, randomly skip the whole tick with probability (1 - multiplier). 0 = disabled. */
 const rawBusy = Number(Deno.env.get("HUMAN_ACTIVITY_BUSY_MIN_POSTS") ?? "0");
 const HUMAN_ACTIVITY_BUSY_MIN_POSTS = Number.isFinite(rawBusy) && rawBusy >= 0
   ? Math.floor(rawBusy)
@@ -30,13 +30,13 @@ const HUMAN_ACTIVITY_AI_MULTIPLIER = Number.isFinite(rawHumMult) && rawHumMult >
   ? rawHumMult
   : 0.5;
 
-/** Skip proactive replies on human **root** threads that already have this many replies (flat model: count by parent_id). */
+/** Skip proactive replies when the thread already has this many replies under the root (flat model: count by parent_id). */
 const rawThreadCap = Number(Deno.env.get("TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE") ?? "5");
 const TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE = Number.isFinite(rawThreadCap) && rawThreadCap >= 0
   ? Math.floor(rawThreadCap)
   : 5;
 
-const TICK_VERSION = "3";
+const TICK_VERSION = "4";
 
 type PostRow = {
   id: string;
@@ -58,7 +58,7 @@ type PerPostOutcome =
   | "skipped_thread_cap"
   | "error";
 
-/** When no agent interests match the post, still pick one agent (random order) so generic human posts get replies. */
+/** When no agent interests match the post, still pick one agent (random order) so generic posts get replies. */
 function shuffle<T>(items: T[]): T[] {
   const arr = [...items];
   for (let i = arr.length - 1; i > 0; i--) {
@@ -131,12 +131,12 @@ Deno.serve(async (req) => {
   }
 
   const pool = (recentPosts ?? []) as PostRow[];
-  const humanPool = pool.filter((p) => p.author && !p.author.is_agent);
-  const humanRootsInPool = humanPool.filter((p) => p.parent_id == null).length;
+  const feedPool = pool.filter((p) => p.author);
+  const rootsInPool = feedPool.filter((p) => p.parent_id == null).length;
 
   if (
     HUMAN_ACTIVITY_BUSY_MIN_POSTS > 0 &&
-    humanPool.length >= HUMAN_ACTIVITY_BUSY_MIN_POSTS &&
+    feedPool.length >= HUMAN_ACTIVITY_BUSY_MIN_POSTS &&
     Math.random() > HUMAN_ACTIVITY_AI_MULTIPLIER
   ) {
     return jsonResponse({
@@ -144,20 +144,20 @@ Deno.serve(async (req) => {
       tickVersion: TICK_VERSION,
       lookbackMinutes: LOOKBACK_MINUTES,
       poolFetched: pool.length,
-      humanInPool: humanPool.length,
-      humanRootsInPool,
+      postsInPool: feedPool.length,
+      rootsInPool,
       zeroReplyRootsInPool: 0,
       selectedForProcessing: 0,
       scanned: 0,
       replies: 0,
-      skipped: "human_activity_burst",
+      skipped: "activity_burst",
       perPost: [],
     });
   }
 
   let replyCountByRoot: Map<string, number> = new Map();
   try {
-    const rootIds = [...new Set(humanPool.filter((p) => p.parent_id == null).map((p) => p.id))];
+    const rootIds = [...new Set(feedPool.filter((p) => p.parent_id == null).map((p) => p.id))];
     replyCountByRoot = await replyCountsByRootId(supabase, rootIds);
   } catch (err) {
     console.error("reply count batch failed", err);
@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
     );
   }
 
-  const zeroReplyRootsInPool = humanPool.filter((p) => {
+  const zeroReplyRootsInPool = feedPool.filter((p) => {
     if (p.parent_id != null) return false;
     return (replyCountByRoot.get(p.id) ?? 0) === 0;
   }).length;
@@ -185,14 +185,14 @@ Deno.serve(async (req) => {
     return 2;
   }
 
-  const sortedHumans = [...humanPool].sort((a, b) => {
+  const sortedFeed = [...feedPool].sort((a, b) => {
     const ta = sortTier(a);
     const tb = sortTier(b);
     if (ta !== tb) return ta - tb;
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
-  const candidatePosts = sortedHumans.slice(0, MAX_POSTS_PER_TICK);
+  const candidatePosts = sortedFeed.slice(0, MAX_POSTS_PER_TICK);
 
   if (candidatePosts.length === 0) {
     return jsonResponse({
@@ -200,8 +200,8 @@ Deno.serve(async (req) => {
       tickVersion: TICK_VERSION,
       lookbackMinutes: LOOKBACK_MINUTES,
       poolFetched: pool.length,
-      humanInPool: humanPool.length,
-      humanRootsInPool,
+      postsInPool: feedPool.length,
+      rootsInPool,
       zeroReplyRootsInPool,
       selectedForProcessing: 0,
       scanned: 0,
@@ -293,6 +293,7 @@ Deno.serve(async (req) => {
     for (const { agent } of selections) {
       const key = `${agent.profile_id}:${post.id}`;
       if (touched.has(key)) continue;
+      if (agent.profile_id === post.author_id) continue;
       if (isOnCooldown(agent)) continue;
       try {
         const didPost = await generateAndPostReply(supabase, {
@@ -367,8 +368,8 @@ Deno.serve(async (req) => {
     tickVersion: TICK_VERSION,
     lookbackMinutes: LOOKBACK_MINUTES,
     poolFetched: pool.length,
-    humanInPool: humanPool.length,
-    humanRootsInPool,
+    postsInPool: feedPool.length,
+    rootsInPool,
     zeroReplyRootsInPool,
     selectedForProcessing: candidatePosts.length,
     scanned: candidatePosts.length,
