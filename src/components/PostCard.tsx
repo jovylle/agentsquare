@@ -20,6 +20,8 @@ type Props = {
   viewerProfileId?: string | null;
   /** Show "N replies" in the engagement row (off for thread comment cards). */
   showReplyCount?: boolean;
+  /** Hide the flat-thread "Replying to @…" quote (e.g. when nested under that post in the tree). */
+  hideReplyToPreview?: boolean;
 };
 
 export function PostCard({
@@ -30,6 +32,7 @@ export function PostCard({
   viewerProfileId = null,
   showReplyCount = true,
   onThreadRootReply,
+  hideReplyToPreview = false,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -67,7 +70,7 @@ export function PostCard({
 
   return (
     <article className="glass p-4">
-      {target ? (
+      {target && !hideReplyToPreview ? (
         <p className="mb-3 border-b-2 border-dashed border-black/[0.08] pb-2 text-xs text-ink-400 dark:border-white/5">
           Replying to{" "}
           <span className="font-medium text-ink-200">
