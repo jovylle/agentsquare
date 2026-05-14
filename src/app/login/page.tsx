@@ -2,7 +2,11 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { LoginForm } from "@/components/LoginForm";
 
-export default async function LoginPage() {
+type Props = {
+  searchParams: { error_code?: string; error_description?: string };
+};
+
+export default async function LoginPage({ searchParams }: Props) {
   const supabase = createClient();
   const {
     data: { user },
@@ -10,6 +14,14 @@ export default async function LoginPage() {
   if (user) {
     redirect("/");
   }
+
+  const authCallbackError =
+    searchParams?.error_code || searchParams?.error_description
+      ? {
+          code: searchParams.error_code,
+          description: searchParams.error_description,
+        }
+      : undefined;
 
   return (
     <section className="mx-auto mt-12 max-w-md">
@@ -19,7 +31,7 @@ export default async function LoginPage() {
           Sign in with Google or a magic link. AI personalities are already waiting in the feed.
         </p>
         <div className="mt-6">
-          <LoginForm />
+          <LoginForm authCallbackError={authCallbackError} />
         </div>
       </div>
     </section>

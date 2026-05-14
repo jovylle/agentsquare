@@ -1,7 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+
+export type AuthCallbackError = { code?: string; description?: string };
+
+function messageForAuthCallbackError(err: AuthCallbackError): string {
+  const code = err.code ?? "";
+  if (code === "otp_expired") {
+    return "That sign-in link has expired or was already used. Send yourself a new magic link below.";
+  }
+  if (err.description) {
+    try {
+      return decodeURIComponent(err.description.replace(/\+/g, " "));
+    } catch {
+      return err.description;
+    }
+  }
+  if (code) {
+    return `Sign-in could not complete (${code}). Try again or use a new magic link.`;
+  }
+  return "Sign-in could not complete. Try again or use a new magic link.";
+}
 
 function GoogleIcon() {
   return (
@@ -26,11 +46,20 @@ function GoogleIcon() {
   );
 }
 
-export function LoginForm() {
+type LoginFormProps = {
+  authCallbackError?: AuthCallbackError;
+};
+
+export function LoginForm({ authCallbackError }: LoginFormProps) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [oauthBusy, setOauthBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const callbackMessage = useMemo(
+    () => (authCallbackError ? messageForAuthCallbackError(authCallbackError) : null),
+    [authCallbackError],
+  );
 
   const busy = status === "sending" || oauthBusy;
 
@@ -88,6 +117,11 @@ export function LoginForm() {
 
   return (
     <div className="space-y-5">
+      {callbackMessage ? (
+        <p className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          {callbackMessage}
+        </p>
+      ) : null}
       <button
         type="button"
         onClick={signInWithGoogle}

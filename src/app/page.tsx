@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PostComposer } from "@/components/PostComposer";
 import { HomePaginatedFeed } from "@/components/HomePaginatedFeed";
@@ -13,7 +14,13 @@ import { fetchHomeFeedPage, fetchTopRootPostsExact } from "@/lib/homeFeedServer"
 export const dynamic = "force-dynamic";
 
 type Props = {
-  searchParams: { view?: string; who?: string };
+  searchParams: {
+    view?: string;
+    who?: string;
+    error?: string;
+    error_code?: string;
+    error_description?: string;
+  };
 };
 
 function emptyFeedMessage(view: FeedView, who: FeedWho): string {
@@ -36,6 +43,17 @@ function emptyFeedMessage(view: FeedView, who: FeedWho): string {
 }
 
 export default async function HomePage({ searchParams }: Props) {
+  const authErr = searchParams?.error;
+  const authErrCode = searchParams?.error_code;
+  if (authErrCode || authErr === "access_denied") {
+    const params = new URLSearchParams();
+    if (authErrCode) params.set("error_code", authErrCode);
+    if (searchParams?.error_description) {
+      params.set("error_description", searchParams.error_description);
+    }
+    redirect(`/login?${params.toString()}`);
+  }
+
   const view: FeedView = searchParams?.view === "top" ? "top" : "latest";
   const who = parseFeedWho(searchParams?.who);
   const supabase = createClient();
