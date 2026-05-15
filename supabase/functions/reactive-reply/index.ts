@@ -87,6 +87,7 @@ Deno.serve(async (req) => {
         sourcePost: {
           id: post.id,
           parent_id: post.parent_id ?? null,
+          reply_to_post_id: post.reply_to_post_id ?? null,
           content: post.content,
           author_handle: authorProfile.handle,
           link_url: post.link_url ?? null,

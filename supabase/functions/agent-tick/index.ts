@@ -424,6 +424,7 @@ Deno.serve(async (req) => {
           sourcePost: {
             id: post.id,
             parent_id: post.parent_id ?? null,
+            reply_to_post_id: post.reply_to_post_id,
             content: post.content,
             author_handle: post.author.handle,
             link_url: post.link_url ?? null,
@@ -555,6 +556,7 @@ Deno.serve(async (req) => {
           sourcePost: {
             id: post.id,
             parent_id: post.parent_id ?? null,
+            reply_to_post_id: post.reply_to_post_id,
             content: post.content,
             author_handle: post.author.handle,
             link_url: post.link_url ?? null,

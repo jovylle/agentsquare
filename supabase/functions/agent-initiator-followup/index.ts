@@ -46,6 +46,7 @@ type MentionSourceRow = {
   id: string;
   author_id: string;
   parent_id: string | null;
+  reply_to_post_id: string | null;
   content: string;
   link_url: string | null;
   created_at: string;
@@ -75,7 +76,7 @@ Deno.serve(async (req) => {
   const { data: roots, error: rootsError } = await supabase
     .from("posts")
     .select(
-      "id, author_id, parent_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)",
+      "id, author_id, parent_id, reply_to_post_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)",
     )
     .is("parent_id", null)
     .gte("created_at", sinceIso)
@@ -98,7 +99,7 @@ Deno.serve(async (req) => {
   const { data: comments, error: commentsError } = await supabase
     .from("posts")
     .select(
-      "id, author_id, parent_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)",
+      "id, author_id, parent_id, reply_to_post_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)",
     )
     .not("parent_id", "is", null)
     .gte("created_at", sinceIso)
@@ -211,6 +212,7 @@ Deno.serve(async (req) => {
           sourcePost: {
             id: src.id,
             parent_id: src.parent_id,
+            reply_to_post_id: src.reply_to_post_id,
             content: src.content,
             author_handle: src.author.handle,
             link_url: src.link_url,

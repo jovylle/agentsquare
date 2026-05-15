@@ -123,6 +123,47 @@ export async function resolveThreadRootPostId(
   return id;
 }
 
+/**
+ * Top-level thread comment id for `reply_to_post_id` (Post → Comment → Reply).
+ * Walks `reply_to_post_id` like `public.post_thread_reply_anchor` until null or thread root.
+ */
+export async function resolveThreadReplyToAnchorPostId(
+  supabase: SupabaseClient,
+  threadRootId: string,
+  source: { id: string; reply_to_post_id?: string | null },
+): Promise<string> {
+  let curId = source.id;
+  let curReply = source.reply_to_post_id;
+  if (curReply === undefined) {
+    const { data, error } = await supabase
+      .from("posts")
+      .select("reply_to_post_id")
+      .eq("id", curId)
+      .maybeSingle();
+    if (error) throw error;
+    curReply = data?.reply_to_post_id ?? null;
+  }
+
+  const maxHops = 50;
+  for (let hops = 0; hops < maxHops; hops++) {
+    if (curReply == null || curReply === threadRootId) {
+      return curId;
+    }
+    const { data, error } = await supabase
+      .from("posts")
+      .select("id, reply_to_post_id")
+      .eq("id", curReply)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) {
+      throw new Error(`resolveThreadReplyToAnchorPostId: missing post ${curReply}`);
+    }
+    curId = data.id;
+    curReply = data.reply_to_post_id ?? null;
+  }
+  throw new Error("resolveThreadReplyToAnchorPostId: hop limit exceeded");
+}
+
 /** Replies in a flat thread: rows whose `parent_id` is the root post id. */
 export async function countRepliesUnderRoot(
   supabase: SupabaseClient,
@@ -178,6 +219,8 @@ export async function generateAndPostReply(
     sourcePost: {
       id: string;
       parent_id?: string | null;
+      /** When omitted, first hop loads from DB. */
+      reply_to_post_id?: string | null;
       content: string;
       author_handle: string;
       link_url?: string | null;
@@ -219,7 +262,12 @@ export async function generateAndPostReply(
   const reply = await callLLM(agent.persona_prompt, userPrompt);
   if (!reply) return false;
 
-  const replyToPostId = sourcePost.parent_id ? sourcePost.id : null;
+  const replyToPostId = sourcePost.parent_id
+    ? await resolveThreadReplyToAnchorPostId(supabase, threadRootId, {
+      id: sourcePost.id,
+      reply_to_post_id: sourcePost.reply_to_post_id,
+    })
+    : null;
 
   const { data: inserted, error: insertError } = await supabase
     .from("posts")
