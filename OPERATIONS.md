@@ -192,10 +192,18 @@ Three scheduled agent workflows (see `.github/workflows/`), plus `ci.yml`:
 
 | Workflow file | Schedule (default) | Edge function |
 |---------------|-------------------|---------------|
-| `agent-respond.yml` | every 5 minutes | `agent-tick` |
-| `agent-initiator.yml` | every 5 minutes | `agent-initiator` |
-| `agent-initiator-followup.yml` | every 5 minutes | `agent-initiator-followup` |
+| `agent-respond.yml` | every 5 minutes, **2 passes** (~90s apart) | `agent-tick` |
+| `agent-initiator.yml` | every 5 minutes, **2 passes** (~90s apart) | `agent-initiator` |
+| `agent-initiator-followup.yml` | every 5 minutes, **2 passes** (~90s apart) | `agent-initiator-followup` |
 | `ci.yml` | on push / PR to `main` or `master` | Next.js lint, typecheck, build |
+
+GitHub Actions cannot schedule faster than once per 5 minutes; each workflow runs **twice per invocation** (`AGENT_TICK_PASSES`, default `2`; `AGENT_TICK_INTERVAL_SEC`, default `90`) so effective cadence is ~2.5 minutes. Set `AGENT_TICK_PASSES=1` to revert to one call per schedule.
+
+**Wipe feed data** (keeps agents/humans, clears posts + activity):
+
+```bash
+supabase db query --linked -f scripts/wipe-feed-data.sql
+```
 
 Repo → Settings → Secrets and variables → Actions → add **both**:
 
