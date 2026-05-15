@@ -103,6 +103,133 @@ export function pickAgentsForPost(
   return out;
 }
 
+/** All @mentioned active agents (mentions only; no topic cap mixing). */
+export function pickMentionedAgents(
+  text: string,
+  agents: AgentRow[],
+  options: { maxReplies?: number } = {},
+): SelectionResult[] {
+  const maxReplies = options.maxReplies ?? 10;
+  const mentions = new Set(extractMentions(text));
+  const out: SelectionResult[] = [];
+  for (const agent of agents) {
+    if (!mentions.has(agent.profile.handle.toLowerCase())) continue;
+    if (out.length >= maxReplies) break;
+    out.push({ agent, trigger: "mention" });
+  }
+  return out;
+}
+
+/** Topic-matched agents only; skips handles in `excludeProfileIds`. */
+export function pickTopicAgentsForPost(
+  text: string,
+  agents: AgentRow[],
+  options: {
+    maxReplies?: number;
+    minTopicScore?: number;
+    excludeProfileIds?: Set<string>;
+  } = {},
+): SelectionResult[] {
+  const maxReplies = options.maxReplies ?? 3;
+  const minTopicScore = options.minTopicScore ?? 1;
+  const exclude = options.excludeProfileIds ?? new Set<string>();
+
+  const topical: { agent: AgentRow; score: number }[] = [];
+  for (const agent of agents) {
+    if (exclude.has(agent.profile_id)) continue;
+    const score = scoreAgent(text, agent.interests);
+    if (score >= minTopicScore) topical.push({ agent, score });
+  }
+  topical.sort((a, b) => b.score - a.score);
+
+  const out: SelectionResult[] = [];
+  for (const t of topical) {
+    if (out.length >= maxReplies) break;
+    out.push({ agent: t.agent, trigger: "topic" });
+  }
+  return out;
+}
+
+export type OwnerReplyContext = "owner_thread" | "owner_direct_reply";
+
+export type OwnerReplyBackResolution = {
+  ownerAgent: AgentRow;
+  ownerReplyContext: OwnerReplyContext;
+  targetPostId: string;
+};
+
+/** Conversation owner for a new comment/reply (human or agent commenter). */
+export async function resolveOwnerReplyBackForInsert(
+  supabase: SupabaseClient,
+  post: {
+    id: string;
+    author_id: string;
+    parent_id: string | null;
+    reply_to_post_id?: string | null;
+  },
+  agentsByProfileId: Map<string, AgentRow>,
+): Promise<OwnerReplyBackResolution | null> {
+  if (post.parent_id == null) return null;
+
+  const R = post.parent_id;
+  const T = post.reply_to_post_id ?? R;
+
+  const { data, error } = await supabase
+    .from("posts")
+    .select("author_id")
+    .eq("id", T)
+    .maybeSingle();
+  if (error) throw error;
+
+  const ownerId = data?.author_id;
+  if (!ownerId || ownerId === post.author_id) return null;
+
+  const ownerAgent = agentsByProfileId.get(ownerId);
+  if (!ownerAgent) return null;
+
+  const ownerReplyContext: OwnerReplyContext = T === R ? "owner_thread" : "owner_direct_reply";
+  return { ownerAgent, ownerReplyContext, targetPostId: T };
+}
+
+export type ReplyBackQueuePost = {
+  id: string;
+  author_id: string;
+  parent_id: string | null;
+  reply_to_post_id: string | null;
+  content: string;
+  link_url: string | null;
+  created_at: string;
+  author_handle: string;
+};
+
+export type ReplyBackQueueItem = {
+  post: ReplyBackQueuePost;
+  targetPostId: string;
+  ownerAgent: AgentRow;
+  ownerReplyContext: OwnerReplyContext;
+};
+
+export function buildReplyBackQueue(
+  feedPool: ReplyBackQueuePost[],
+  authorByPostId: Map<string, string>,
+  agentsByProfileId: Map<string, AgentRow>,
+): ReplyBackQueueItem[] {
+  const items: ReplyBackQueueItem[] = [];
+  for (const p of feedPool) {
+    if (p.parent_id == null) continue;
+    const R = p.parent_id;
+    const T = p.reply_to_post_id ?? R;
+    const ownerId = authorByPostId.get(T);
+    if (ownerId == null || ownerId === p.author_id) continue;
+    const ownerAgent = agentsByProfileId.get(ownerId);
+    if (!ownerAgent) continue;
+    const ownerReplyContext: OwnerReplyContext = T === R ? "owner_thread" : "owner_direct_reply";
+    items.push({ post: p, targetPostId: T, ownerAgent, ownerReplyContext });
+  }
+  items.sort((a, b) => new Date(b.post.created_at).getTime() - new Date(a.post.created_at).getTime());
+  return items;
+}
+
 /** Walk up parent_id so agent replies attach to the thread root (visible on /posts/[rootId]). */
 export async function resolveThreadRootPostId(
   supabase: SupabaseClient,
@@ -209,8 +336,6 @@ export async function agentHasLoggedReplyForSourcePost(
   if (error) throw error;
   return data != null;
 }
-
-export type OwnerReplyContext = "owner_thread" | "owner_direct_reply";
 
 const CLASH_CUE_RE =
   /\bvs\.?\b|(?:^|\s)(?:clash|defend|foil|cage match|rule wins|ideology|hear the defenses)\b/i;

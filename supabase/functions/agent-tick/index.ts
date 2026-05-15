@@ -9,8 +9,10 @@ import {
   isOnCooldown,
   generateAndPostReply,
   countRepliesUnderRoot,
+  agentHasLoggedReplyForSourcePost,
+  buildReplyBackQueue,
   type AgentRow,
-  type OwnerReplyContext,
+  type ReplyBackQueuePost,
 } from "../_shared/agent-logic.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET");
@@ -38,11 +40,11 @@ const TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE = Number.isFinite(rawThreadCap) && ra
   ? Math.floor(rawThreadCap)
   : 0;
 
-/** Probability the conversation-target author (agent) replies to a new thread comment (0 = off). */
-const rawOwnerP = Number(Deno.env.get("OWNER_REPLY_BACK_PROBABILITY") ?? "0.8");
+/** Legacy: ignored for backup reply-back (webhook owns instant owner replies). Kept for env compat. */
+const rawOwnerP = Number(Deno.env.get("OWNER_REPLY_BACK_PROBABILITY") ?? "0");
 const OWNER_REPLY_BACK_PROBABILITY = Number.isFinite(rawOwnerP) && rawOwnerP >= 0 && rawOwnerP <= 1
   ? rawOwnerP
-  : 0.8;
+  : 0;
 
 const rawOwnerMax = Number(Deno.env.get("OWNER_REPLY_BACK_MAX_PER_TICK") ?? "2");
 const OWNER_REPLY_BACK_MAX_PER_TICK = Number.isFinite(rawOwnerMax)
@@ -55,7 +57,7 @@ const TICK_MAX_PROACTIVE_REPLIES_PER_POST = Number.isFinite(rawProactivePerPost)
   ? Math.min(10, Math.max(1, Math.floor(rawProactivePerPost)))
   : 3;
 
-const TICK_VERSION = "8";
+const TICK_VERSION = "9";
 
 type PostRow = {
   id: string;
@@ -77,13 +79,6 @@ type PerPostOutcome =
   | "skipped_empty_llm"
   | "skipped_thread_cap"
   | "error";
-
-type ReplyBackItem = {
-  post: PostRow;
-  targetPostId: string;
-  ownerAgent: AgentRow;
-  ownerReplyContext: OwnerReplyContext;
-};
 
 /** When no agent interests match the post, still pick one agent (random order) so generic posts get replies. */
 function shuffle<T>(items: T[]): T[] {
@@ -147,26 +142,17 @@ async function buildAuthorByPostId(
   return map;
 }
 
-function buildReplyBackQueue(
-  feedPool: PostRow[],
-  authorByPostId: Map<string, string>,
-  agentsByProfileId: Map<string, AgentRow>,
-): ReplyBackItem[] {
-  const items: ReplyBackItem[] = [];
-  for (const p of feedPool) {
-    if (p.parent_id == null) continue;
-    const R = p.parent_id;
-    // Conversation owner = author of the post this row replies to (explicit reply_to, else the thread root).
-    const T = p.reply_to_post_id ?? R;
-    const ownerId = authorByPostId.get(T);
-    if (ownerId == null || ownerId === p.author_id) continue;
-    const ownerAgent = agentsByProfileId.get(ownerId);
-    if (!ownerAgent) continue;
-    const ownerReplyContext: OwnerReplyContext = T === R ? "owner_thread" : "owner_direct_reply";
-    items.push({ post: p, targetPostId: T, ownerAgent, ownerReplyContext });
-  }
-  items.sort((a, b) => new Date(b.post.created_at).getTime() - new Date(a.post.created_at).getTime());
-  return items;
+function toReplyBackPosts(feedPool: PostRow[]): ReplyBackQueuePost[] {
+  return feedPool.map((p) => ({
+    id: p.id,
+    author_id: p.author_id,
+    parent_id: p.parent_id,
+    reply_to_post_id: p.reply_to_post_id,
+    content: p.content,
+    link_url: p.link_url,
+    created_at: p.created_at,
+    author_handle: p.author.handle,
+  }));
 }
 
 async function threadCapSkipsPost(
@@ -244,6 +230,7 @@ Deno.serve(async (req) => {
       scanned: 0,
       replies: 0,
       ownerReplyBacks: 0,
+      ownerReplyBacksSkippedAlready: 0,
       skipped: "activity_burst",
       perPost: [],
     });
@@ -305,8 +292,8 @@ Deno.serve(async (req) => {
     );
   }
 
-  const replyBackQueue = OWNER_REPLY_BACK_PROBABILITY > 0 && OWNER_REPLY_BACK_MAX_PER_TICK > 0
-    ? buildReplyBackQueue(feedPool, authorByPostId, agentsByProfileId)
+  const replyBackQueue = OWNER_REPLY_BACK_MAX_PER_TICK > 0
+    ? buildReplyBackQueue(toReplyBackPosts(feedPool), authorByPostId, agentsByProfileId)
     : [];
 
   const allPoolPostIds = [...new Set(feedPool.map((p) => p.id))];
@@ -334,15 +321,21 @@ Deno.serve(async (req) => {
 
   let replies = 0;
   let ownerReplyBacks = 0;
+  let ownerReplyBacksSkippedAlready = 0;
   const excludedFromGeneric = new Set<string>();
 
-  if (replyBackQueue.length > 0 && OWNER_REPLY_BACK_MAX_PER_TICK > 0 && OWNER_REPLY_BACK_PROBABILITY > 0) {
+  if (replyBackQueue.length > 0 && OWNER_REPLY_BACK_MAX_PER_TICK > 0) {
     for (const item of replyBackQueue) {
       if (ownerReplyBacks >= OWNER_REPLY_BACK_MAX_PER_TICK) break;
 
       const { post, ownerAgent, ownerReplyContext, targetPostId } = item;
       const key = `${ownerAgent.profile_id}:${post.id}`;
-      if (touched.has(key)) {
+
+      if (
+        touched.has(key) ||
+        (await agentHasLoggedReplyForSourcePost(supabase, ownerAgent.profile_id, post.id))
+      ) {
+        ownerReplyBacksSkippedAlready += 1;
         perPost.push({
           postId: post.id,
           replyCount: 0,
@@ -406,20 +399,7 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      if (Math.random() >= OWNER_REPLY_BACK_PROBABILITY) {
-        const { error: skipLogErr } = await supabase.from("agent_activity_log").insert({
-          agent_id: ownerAgent.profile_id,
-          post_id: null,
-          source_post_id: post.id,
-          trigger_type: "reply_back_skip",
-        });
-        if (skipLogErr) {
-          console.error("reply_back_skip insert failed", skipLogErr);
-        } else {
-          touched.add(key);
-        }
-        continue;
-      }
+      void OWNER_REPLY_BACK_PROBABILITY;
 
       if (!isRoot && post.parent_id) {
         replyCount = await countRepliesUnderRoot(supabase, post.parent_id);
@@ -493,6 +473,7 @@ Deno.serve(async (req) => {
       scanned: 0,
       replies,
       ownerReplyBacks,
+      ownerReplyBacksSkippedAlready,
       perPost,
     });
   }
@@ -649,6 +630,7 @@ Deno.serve(async (req) => {
     scanned: candidatePosts.length,
     replies,
     ownerReplyBacks,
+    ownerReplyBacksSkippedAlready,
     perPost,
   });
 });
