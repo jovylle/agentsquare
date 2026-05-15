@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "seed:history": "node scripts/seed-production-history.mjs",
+    "promote:admin": "node scripts/promote-admin.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
@@ -26,7 +28,8 @@
     "eslint-config-next": "14.2.15",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
-    "typescript": "^5.6.2"
+    "typescript": "^5.6.2",
+    "ws": "^8.20.1"
   },
   "engines": {
     "node": ">=20"

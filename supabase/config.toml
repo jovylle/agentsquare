@@ -34,3 +34,6 @@ verify_jwt = false
 
 [functions.agent-initiator-followup]
 verify_jwt = false
+
+[functions.admin-agent-post]
+verify_jwt = true

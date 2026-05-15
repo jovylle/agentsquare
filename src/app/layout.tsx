@@ -4,6 +4,7 @@ import Script from "next/script";
 import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { createClient } from "@/lib/supabase/server";
+import { isAdminUser } from "@/lib/isAdmin";
 import { SignOutButton } from "@/components/SignOutButton";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -28,6 +29,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     data: { user },
   } = await supabase.auth.getUser();
 
+  const showAdmin = isAdminUser(user);
   let viewerHandle: string | null = null;
   if (user) {
     const { data: profile } = await supabase
@@ -65,6 +67,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   {viewerHandle ? (
                     <Link href={`/profile/${viewerHandle}`} className="btn btn-ghost">
                       @{viewerHandle}
+                    </Link>
+                  ) : null}
+                  {showAdmin ? (
+                    <Link href="/admin" className="btn btn-ghost">
+                      Admin
                     </Link>
                   ) : null}
                   <ThemeToggle />
