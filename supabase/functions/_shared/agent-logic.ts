@@ -212,6 +212,70 @@ export async function agentHasLoggedReplyForSourcePost(
 
 export type OwnerReplyContext = "owner_thread" | "owner_direct_reply";
 
+const CLASH_CUE_RE =
+  /\bvs\.?\b|(?:^|\s)(?:clash|defend|foil|cage match|rule wins|ideology|hear the defenses)\b/i;
+
+/**
+ * When a post @mentions agents in a vs/clash frame, infer the hyphenated pole
+ * tied to this handle (e.g. segment after @scout until the next @mention).
+ */
+export function inferDebatePoleForMention(content: string, handle: string): string | null {
+  const token = `@${handle.toLowerCase()}`;
+  const mentionRe = /@([a-z0-9_]{2,32})/gi;
+  const mentions: { handle: string; start: number; end: number }[] = [];
+  for (const m of content.matchAll(mentionRe)) {
+    mentions.push({
+      handle: m[1].toLowerCase(),
+      start: m.index!,
+      end: m.index! + m[0].length,
+    });
+  }
+  const mineIdx = mentions.findIndex((m) => m.handle === handle.toLowerCase());
+  if (mineIdx === -1) return null;
+
+  const mine = mentions[mineIdx]!;
+  const segStart = mine.end;
+  const segEnd = mineIdx + 1 < mentions.length ? mentions[mineIdx + 1]!.start : content.length;
+  const segment = content.slice(segStart, segEnd);
+
+  const poleRe = /\b([a-z][a-z0-9]*(?:-[a-z0-9]+)+)\b/gi;
+  const polesInSegment: string[] = [];
+  for (const m of segment.matchAll(poleRe)) {
+    const p = m[1];
+    if (!polesInSegment.some((x) => x.toLowerCase() === p.toLowerCase())) polesInSegment.push(p);
+  }
+  if (polesInSegment.length >= 1) return polesInSegment[0]!;
+
+  const before = content.slice(Math.max(0, mine.start - 72), mine.end);
+  const polesBefore: string[] = [];
+  for (const m of before.matchAll(poleRe)) {
+    const p = m[1];
+    if (!polesBefore.some((x) => x.toLowerCase() === p.toLowerCase())) polesBefore.push(p);
+  }
+  if (polesBefore.length === 1) return polesBefore[0]!;
+  return null;
+}
+
+function buildMentionDebatePromptLines(
+  content: string,
+  handle: string,
+  trigger: "mention" | "topic" | "proactive" | "reply_back",
+): string[] {
+  if (trigger !== "mention") return [];
+  if (!CLASH_CUE_RE.test(content)) return [];
+
+  const pole = inferDebatePoleForMention(content, handle);
+  if (pole) {
+    return [
+      `You were @mentioned in a principle clash. The post frames your pole as: ${pole}.`,
+      "Defend that side in your voice—one sharp claim or concrete example. Do not both-sides, mediate, or pitch blending unless they explicitly asked for neutrality.",
+    ];
+  }
+  return [
+    "You were @mentioned in a principle clash. Defend the pole the post assigns you—one sharp claim. Do not both-sides or preach balance unless they asked for mediation.",
+  ];
+}
+
 export async function generateAndPostReply(
   supabase: SupabaseClient,
   args: {
@@ -248,6 +312,12 @@ export async function generateAndPostReply(
       ? "They replied directly to your earlier message in this thread — respond naturally and briefly."
       : null;
 
+  const debateLines = buildMentionDebatePromptLines(
+    sourcePost.content,
+    agent.profile.handle,
+    trigger,
+  );
+
   const userPrompt = [
     `A user (@${sourcePost.author_handle}) just posted on AgentSquare:`,
     ...(sourcePost.parent_id ? ["(They replied in an existing thread.)", ""] : []),
@@ -255,7 +325,9 @@ export async function generateAndPostReply(
     sourcePost.content,
     ...(showLink ? ["", `Related link they shared: ${sourcePost.link_url}`] : []),
     "",
+    ...(debateLines.length > 0 ? [...debateLines, ""] : []),
     ...(contextLine ? [contextLine, ""] : []),
+    ...(agent.reply_style ? [`Reply style reminder: ${agent.reply_style}`, ""] : []),
     `Write your reply as ${agent.profile.display_name} (@${agent.profile.handle}). Stay in voice. Do not quote the user's post back to them.`,
   ].join("\n");
 

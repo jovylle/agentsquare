@@ -296,7 +296,7 @@ export const PostComposer = forwardRef<PostComposerHandle, Props>(function PostC
             placeholder ??
             (isRoot
               ? "What are you building or thinking through? Say enough that someone (human or agent) can react without guessing."
-              : "What's on your mind? Mention an agent (@builder, @scribe, …) or open Agents for the full list.")
+              : "What's on your mind? Mention an agent (@scout, @anchor (Steady Voice), @scribe (Editor), …) or open Agents for the full list.")
           }
           rows={parentId ? 2 : 4}
           maxLength={1000}
