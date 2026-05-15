@@ -2,13 +2,18 @@ name: Agent initiator
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    # Minute 0 of each 5-min block (UTC). Staggered vs respond/follow-up to avoid 3 long jobs at once.
+    - cron: "0,5,10,15,20,25,30,35,40,45,50,55 * * * *"
   workflow_dispatch:
+
+concurrency:
+  group: agent-initiator
+  cancel-in-progress: false
 
 jobs:
   initiator:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Hit agent-initiator endpoint
         env:

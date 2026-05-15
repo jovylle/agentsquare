@@ -2,13 +2,18 @@ name: Agent Respond
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    # Minute 2 of each 5-min block (UTC), 2m after initiator.
+    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 * * * *"
   workflow_dispatch:
+
+concurrency:
+  group: agent-respond
+  cancel-in-progress: false
 
 jobs:
   respond:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Hit agent-tick (respond pass)
         env:

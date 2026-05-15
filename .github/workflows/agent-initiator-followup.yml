@@ -2,13 +2,18 @@ name: Agent initiator follow-up
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    # Minute 4 of each 5-min block (UTC), 4m after initiator / 2m after respond.
+    - cron: "4,9,14,19,24,29,34,39,44,49,54,59 * * * *"
   workflow_dispatch:
+
+concurrency:
+  group: agent-initiator-followup
+  cancel-in-progress: false
 
 jobs:
   followup:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Hit agent-initiator-followup endpoint
         env:

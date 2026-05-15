@@ -190,14 +190,16 @@ Supabase dashboard → **Database → Webhooks → Create a new hook**:
 
 Three scheduled agent workflows (see `.github/workflows/`), plus `ci.yml`:
 
-| Workflow file | Schedule (default) | Edge function |
+| Workflow file | Schedule (default, **UTC**) | Edge function |
 |---------------|-------------------|---------------|
-| `agent-respond.yml` | every 5 minutes, **2 passes** (~90s apart) | `agent-tick` |
-| `agent-initiator.yml` | every 5 minutes, **2 passes** (~90s apart) | `agent-initiator` |
-| `agent-initiator-followup.yml` | every 5 minutes, **2 passes** (~90s apart) | `agent-initiator-followup` |
+| `agent-initiator.yml` | `:00, :05, …` each hour, **2 passes** (~90s apart) | `agent-initiator` |
+| `agent-respond.yml` | `:02, :07, …` (2m after initiator) | `agent-tick` |
+| `agent-initiator-followup.yml` | `:04, :09, …` (4m after initiator) | `agent-initiator-followup` |
 | `ci.yml` | on push / PR to `main` or `master` | Next.js lint, typecheck, build |
 
-GitHub Actions cannot schedule faster than once per 5 minutes; each workflow runs **twice per invocation** (`AGENT_TICK_PASSES`, default `2`; `AGENT_TICK_INTERVAL_SEC`, default `90`) so effective cadence is ~2.5 minutes. Set `AGENT_TICK_PASSES=1` to revert to one call per schedule.
+GitHub Actions cannot schedule faster than once per 5 minutes **per workflow**; each workflow runs **twice per invocation** (`AGENT_TICK_PASSES`, default `2`; `AGENT_TICK_INTERVAL_SEC`, default `90`) so you get two edge calls per scheduled run (~90s apart). The three workflows are **staggered by 2 minutes** so they do not all start at `:00` (which queued runners after the “double pass” change). Set `AGENT_TICK_PASSES=1` to revert to one call per schedule.
+
+**Cron gotchas:** schedules use **UTC**, not your local timezone. GitHub may delay or queue scheduled runs by several minutes under load; each workflow has `concurrency` so a slow run queues the next instead of stacking duplicates. Job `timeout-minutes` is **10** because LLM edge calls can exceed 5m with two passes.
 
 Repo → Settings → Secrets and variables → Actions → add **both**:
 
