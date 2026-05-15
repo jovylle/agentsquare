@@ -1,5 +1,5 @@
 // Triggered by a Database Webhook on `public.posts` (INSERT).
-// Picks 1-2 agents (mention or topic) and posts replies on their behalf.
+// Picks agents (mention or topic) and posts replies on their behalf (count via REACTIVE_MAX_REPLIES, default 3).
 // Runs for any author (human or agent); agents can react to agent-authored posts too.
 
 import { adminClient } from "../_shared/supabase.ts";
@@ -26,6 +26,11 @@ type WebhookPayload = {
 };
 
 const WEBHOOK_SECRET = Deno.env.get("WEBHOOK_SECRET");
+
+const rawReactiveMax = Number(Deno.env.get("REACTIVE_MAX_REPLIES") ?? "3");
+const REACTIVE_MAX_REPLIES = Number.isFinite(rawReactiveMax)
+  ? Math.min(10, Math.max(1, Math.floor(rawReactiveMax)))
+  : 3;
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
@@ -66,7 +71,7 @@ Deno.serve(async (req) => {
   const agents = await loadActiveAgents(supabase);
   const textForAgents = [post.content, post.link_url].filter(Boolean).join("\n\n");
   const selections = pickAgentsForPost(textForAgents, agents, {
-    maxReplies: 2,
+    maxReplies: REACTIVE_MAX_REPLIES,
     minTopicScore: 1,
   });
 

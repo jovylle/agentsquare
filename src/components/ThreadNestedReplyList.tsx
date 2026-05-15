@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { PostCard } from "@/components/PostCard";
 import { PostComposer, type PostComposerHandle } from "@/components/PostComposer";
 import { buildThreadReplyTree, type ReplyTreeNode } from "@/lib/threadReplyTree";
+import { buildPostReplyAnchorMap, resolveReplyToAnchorPostId } from "@/lib/threadReplyAnchor";
 import type { PostWithAuthor } from "@/lib/supabase/types";
 
 type Props = {
@@ -23,6 +24,7 @@ function NestedBranch({
   node,
   depth,
   threadRootId,
+  anchorById,
   canPost,
   viewerProfileId,
   expandedBranchPostId,
@@ -32,14 +34,15 @@ function NestedBranch({
   node: ReplyTreeNode;
   depth: number;
   threadRootId: string;
+  anchorById: Map<string, Pick<PostWithAuthor, "id" | "reply_to_post_id">>;
   canPost: boolean;
   viewerProfileId: string | null;
   expandedBranchPostId: string | null;
   onExpandBranch: (postId: string | null) => void;
   branchComposerRef: RefObject<PostComposerHandle | null>;
 }) {
-  const isTop = depth === 0;
-  const expanded = isTop && expandedBranchPostId === node.post.id;
+  const expanded = expandedBranchPostId === node.post.id;
+  const anchoredReplyToId = resolveReplyToAnchorPostId(threadRootId, node.post.id, anchorById);
 
   return (
     <div className={depth > 0 ? "mt-2 border-l-2 border-black/[0.08] pl-3 dark:border-white/10" : ""}>
@@ -51,7 +54,7 @@ function NestedBranch({
         showReplyCount={false}
         hideReplyToPreview={depth > 0}
         engagementEndSlot={
-          isTop && canPost ? (
+          canPost ? (
             expanded ? (
               <button
                 type="button"
@@ -80,6 +83,7 @@ function NestedBranch({
               node={child}
               depth={depth + 1}
               threadRootId={threadRootId}
+              anchorById={anchorById}
               canPost={canPost}
               viewerProfileId={viewerProfileId}
               expandedBranchPostId={expandedBranchPostId}
@@ -89,12 +93,12 @@ function NestedBranch({
           ))}
         </div>
       ) : null}
-      {isTop && canPost && expanded ? (
+      {canPost && expanded ? (
         <div className="mt-3">
           <PostComposer
             ref={branchComposerRef as Ref<PostComposerHandle>}
             parentId={threadRootId}
-            replyToPostId={node.post.id}
+            replyToPostId={anchoredReplyToId}
             placeholder={`Reply to @${node.post.author.handle}…`}
             onPosted={() => onExpandBranch(null)}
           />
@@ -156,6 +160,7 @@ export function ThreadNestedReplyList({
   }, [router, threadRootId]);
 
   const roots = useMemo(() => buildThreadReplyTree(posts, threadRootId), [posts, threadRootId]);
+  const anchorById = useMemo(() => buildPostReplyAnchorMap(posts), [posts]);
 
   if (roots.length === 0) {
     return (
@@ -173,6 +178,7 @@ export function ThreadNestedReplyList({
           node={node}
           depth={0}
           threadRootId={threadRootId}
+          anchorById={anchorById}
           canPost={canPost}
           viewerProfileId={viewerProfileId}
           expandedBranchPostId={expandedBranchPostId}

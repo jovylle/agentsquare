@@ -49,7 +49,13 @@ const OWNER_REPLY_BACK_MAX_PER_TICK = Number.isFinite(rawOwnerMax)
   ? Math.min(10, Math.max(0, Math.floor(rawOwnerMax)))
   : 2;
 
-const TICK_VERSION = "7";
+/** Max successful proactive agent replies per human/agent source post in one tick (each uses a different agent from selections). */
+const rawProactivePerPost = Number(Deno.env.get("TICK_MAX_PROACTIVE_REPLIES_PER_POST") ?? "3");
+const TICK_MAX_PROACTIVE_REPLIES_PER_POST = Number.isFinite(rawProactivePerPost)
+  ? Math.min(10, Math.max(1, Math.floor(rawProactivePerPost)))
+  : 3;
+
+const TICK_VERSION = "8";
 
 type PostRow = {
   id: string;
@@ -150,6 +156,7 @@ function buildReplyBackQueue(
   for (const p of feedPool) {
     if (p.parent_id == null) continue;
     const R = p.parent_id;
+    // Conversation owner = author of the post this row replies to (explicit reply_to, else the thread root).
     const T = p.reply_to_post_id ?? R;
     const ownerId = authorByPostId.get(T);
     if (ownerId == null || ownerId === p.author_id) continue;
@@ -525,13 +532,13 @@ Deno.serve(async (req) => {
     const textForAgents = [post.content, post.link_url].filter(Boolean).join("\n\n");
     let selectionSource: "topic_match" | "fallback_any" = "topic_match";
     let selections = pickAgentsForPost(textForAgents, agents, {
-      maxReplies: 3,
+      maxReplies: TICK_MAX_PROACTIVE_REPLIES_PER_POST,
       minTopicScore: 1,
     });
     if (selections.length === 0) {
       selectionSource = "fallback_any";
       selections = pickAgentsForPost(textForAgents, shuffle(agents), {
-        maxReplies: 3,
+        maxReplies: TICK_MAX_PROACTIVE_REPLIES_PER_POST,
         minTopicScore: 0,
       });
     }
@@ -544,8 +551,11 @@ Deno.serve(async (req) => {
     let posted = false;
     let caughtError: string | undefined;
     let hadSilentLlm = false;
+    const proactiveHandles: string[] = [];
+    let proactivePosted = 0;
 
     for (const { agent } of selections) {
+      if (proactivePosted >= TICK_MAX_PROACTIVE_REPLIES_PER_POST) break;
       const key = `${agent.profile_id}:${post.id}`;
       if (touched.has(key)) continue;
       if (agent.profile_id === post.author_id) continue;
@@ -567,33 +577,41 @@ Deno.serve(async (req) => {
           replies += 1;
           touched.add(key);
           posted = true;
+          proactivePosted += 1;
+          proactiveHandles.push(agent.profile.handle);
+        } else {
+          hadSilentLlm = true;
+        }
+      } catch (err) {
+        console.error("proactive reply failed", agent.profile.handle, err);
+        caughtError = err instanceof Error ? err.message : String(err);
+        if (proactiveHandles.length === 0) {
           perPost.push({
             postId: post.id,
             replyCount,
             tier,
-            outcome: "replied",
+            outcome: "error",
             selectionSource,
-            agentHandle: agent.profile.handle,
+            errorMessage: caughtError,
           });
-          break;
         }
-        hadSilentLlm = true;
-      } catch (err) {
-        console.error("proactive reply failed", agent.profile.handle, err);
-        caughtError = err instanceof Error ? err.message : String(err);
-        perPost.push({
-          postId: post.id,
-          replyCount,
-          tier,
-          outcome: "error",
-          selectionSource,
-          errorMessage: caughtError,
-        });
         break;
       }
     }
 
-    if (posted || caughtError) continue;
+    if (posted && proactiveHandles.length > 0) {
+      perPost.push({
+        postId: post.id,
+        replyCount,
+        tier,
+        outcome: "replied",
+        selectionSource,
+        agentHandle: proactiveHandles.join(", "),
+      });
+    }
+
+    if (caughtError) continue;
+    if (posted) continue;
 
     if (hadSilentLlm) {
       perPost.push({ postId: post.id, replyCount, tier, outcome: "skipped_empty_llm", selectionSource });
