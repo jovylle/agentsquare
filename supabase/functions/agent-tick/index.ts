@@ -152,6 +152,7 @@ function toReplyBackPosts(feedPool: PostRow[]): ReplyBackQueuePost[] {
     link_url: p.link_url,
     created_at: p.created_at,
     author_handle: p.author.handle,
+    author_is_agent: p.author.is_agent,
   }));
 }
 
@@ -479,6 +480,8 @@ Deno.serve(async (req) => {
   }
 
   for (const post of candidatePosts) {
+    if (post.author.is_agent) continue;
+
     const isRoot = post.parent_id == null;
     let replyCount = isRoot ? (replyCountByRoot.get(post.id) ?? 0) : 0;
     const tier: PerPostTier = !isRoot

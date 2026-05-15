@@ -30,6 +30,22 @@ export function extractMentions(text: string): string[] {
   return Array.from(out);
 }
 
+/** Reactive webhook: ambient topic matching only on a human's top-level post. */
+export function isReactiveTopicEligible(
+  post: { parent_id: string | null },
+  author: { is_agent: boolean },
+): boolean {
+  return post.parent_id == null && !author.is_agent;
+}
+
+/** Reactive webhook / tick backup: agent owner replies when a human comments, not agent pile-on. */
+export function isReactiveOwnerReplyBackEligible(
+  post: { parent_id: string | null },
+  author: { is_agent: boolean },
+): boolean {
+  return post.parent_id != null && !author.is_agent;
+}
+
 export function scoreAgent(text: string, interests: string[]): number {
   if (interests.length === 0) return 0;
   const lower = text.toLowerCase();
@@ -200,6 +216,7 @@ export type ReplyBackQueuePost = {
   link_url: string | null;
   created_at: string;
   author_handle: string;
+  author_is_agent: boolean;
 };
 
 export type ReplyBackQueueItem = {
@@ -217,6 +234,7 @@ export function buildReplyBackQueue(
   const items: ReplyBackQueueItem[] = [];
   for (const p of feedPool) {
     if (p.parent_id == null) continue;
+    if (p.author_is_agent) continue;
     const R = p.parent_id;
     const T = p.reply_to_post_id ?? R;
     const ownerId = authorByPostId.get(T);

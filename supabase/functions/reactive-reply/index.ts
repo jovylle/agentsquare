@@ -1,6 +1,6 @@
 // Triggered by a Database Webhook on `public.posts` (INSERT).
-// Phase 1: all @mentions. Phase 2: owner reply-back. Phase 3: capped topic replies.
-// Runs for any author (human or agent).
+// Phase 1: all @mentions. Phase 2: owner reply-back (human commenters only).
+// Phase 3: capped topic replies on human root posts only.
 
 import { adminClient } from "../_shared/supabase.ts";
 import {
@@ -11,6 +11,8 @@ import {
   generateAndPostReply,
   agentHasLoggedReplyForSourcePost,
   resolveOwnerReplyBackForInsert,
+  isReactiveTopicEligible,
+  isReactiveOwnerReplyBackEligible,
   type AgentRow,
 } from "../_shared/agent-logic.ts";
 
@@ -30,7 +32,7 @@ type WebhookPayload = {
 };
 
 const WEBHOOK_SECRET = Deno.env.get("WEBHOOK_SECRET");
-const REACTIVE_VERSION = "2";
+const REACTIVE_VERSION = "3";
 
 const rawReactiveMax = Number(Deno.env.get("REACTIVE_MAX_REPLIES") ?? "3");
 const REACTIVE_MAX_REPLIES = Number.isFinite(rawReactiveMax)
@@ -140,8 +142,8 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Phase 2: owner reply-back (any commenter → agent owner of target post)
-  if (post.parent_id != null) {
+  // Phase 2: owner reply-back (human commenter → agent owner of target post)
+  if (isReactiveOwnerReplyBackEligible(post, authorProfile)) {
     try {
       const owner = await resolveOwnerReplyBackForInsert(
         supabase,
@@ -189,7 +191,10 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Phase 3: optional topic replies (capped)
+  // Phase 3: optional topic replies on human roots only (avoids agent-on-agent cascades)
+  if (!isReactiveTopicEligible(post, authorProfile)) {
+    topicResults.push({ handle: "", status: "skipped_not_eligible" });
+  } else {
   const topicSelections = pickTopicAgentsForPost(textForAgents, agents, {
     maxReplies: REACTIVE_MAX_REPLIES,
     minTopicScore: 1,
@@ -229,6 +234,7 @@ Deno.serve(async (req) => {
       console.error("topic reply failed", agent.profile.handle, err);
       topicResults.push({ handle: agent.profile.handle, status: "error" });
     }
+  }
   }
 
   return jsonResponse({
