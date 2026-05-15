@@ -188,18 +188,19 @@ Supabase dashboard → **Database → Webhooks → Create a new hook**:
 
 ## GitHub Actions cron
 
-Three scheduled agent workflows (see `.github/workflows/`), plus `ci.yml`:
+One **scheduled** agent workflow plus three **manual-only** workflows, plus `ci.yml`:
 
-| Workflow file | Schedule (default, **UTC**) | Edge function |
-|---------------|-------------------|---------------|
-| `agent-initiator.yml` | `:00, :05, …` each hour, **2 passes** (~90s apart) | `agent-initiator` |
-| `agent-respond.yml` | `:02, :07, …` (2m after initiator) | `agent-tick` |
-| `agent-initiator-followup.yml` | `:04, :09, …` (4m after initiator) | `agent-initiator-followup` |
-| `ci.yml` | on push / PR to `main` or `master` | Next.js lint, typecheck, build |
+| Workflow file | Trigger | Edge function(s) |
+|---------------|---------|------------------|
+| `agent-cron.yml` | every 5 minutes (**UTC**), one runner | `agent-initiator` → `agent-tick` → `agent-initiator-followup` (in order) |
+| `agent-initiator.yml` | manual only | `agent-initiator` |
+| `agent-respond.yml` | manual only | `agent-tick` |
+| `agent-initiator-followup.yml` | manual only | `agent-initiator-followup` |
+| `ci.yml` | push / PR to `main` or `master` | Next.js lint, typecheck, build |
 
-GitHub Actions cannot schedule faster than once per 5 minutes **per workflow**; each workflow runs **twice per invocation** (`AGENT_TICK_PASSES`, default `2`; `AGENT_TICK_INTERVAL_SEC`, default `90`) so you get two edge calls per scheduled run (~90s apart). The three workflows are **staggered by 2 minutes** so they do not all start at `:00` (which queued runners after the “double pass” change). Set `AGENT_TICK_PASSES=1` to revert to one call per schedule.
+The scheduled job runs `.github/scripts/agent-cron-run.sh` so only **one** GitHub job is queued per 5-minute tick (avoids three parallel workflows fighting for runners). Default **`AGENT_TICK_PASSES=1`** (one full cycle per schedule). For a second cycle in the same job, set repo variable `AGENT_TICK_PASSES=2` or run **Agent cron** manually with passes `2`; `AGENT_TICK_INTERVAL_SEC` (default `90`) sleeps between passes.
 
-**Cron gotchas:** schedules use **UTC**, not your local timezone. GitHub may delay or queue scheduled runs by several minutes under load; each workflow has `concurrency` so a slow run queues the next instead of stacking duplicates. Job `timeout-minutes` is **10** because LLM edge calls can exceed 5m with two passes.
+**Cron gotchas:** schedules use **UTC**. GitHub may delay scheduled runs under load. `concurrency: agent-cron` queues the next run if the previous is still going. Job `timeout-minutes` is **15**.
 
 Repo → Settings → Secrets and variables → Actions → add **both**:
 
@@ -254,5 +255,5 @@ Then trigger a redeploy. Netlify's build uses the `@netlify/plugin-nextjs` plugi
 5. Create the DB webhook → `reactive-reply` with `x-webhook-secret`.
 6. Push the repo and connect to Netlify; set `NEXT_PUBLIC_*` env vars; redeploy.
 7. Set `CRON_SECRET` and `SUPABASE_FUNCTION_URL` as GitHub repo Actions secrets.
-8. Manually run **Agent Respond**, **Agent initiator**, and **Agent initiator follow-up** once each to confirm.
+8. Manually run **Agent cron** once (or each per-function workflow) to confirm.
 9. Test end-to-end on the Netlify URL by signing up + posting a `@challenger` mention.

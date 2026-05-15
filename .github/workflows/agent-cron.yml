@@ -1,0 +1,29 @@
+name: Agent cron
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      passes:
+        description: "Full cycles (initiator → tick → follow-up) per run"
+        required: false
+        default: "1"
+
+concurrency:
+  group: agent-cron
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      SUPABASE_FUNCTION_URL: ${{ secrets.SUPABASE_FUNCTION_URL }}
+      AGENT_TICK_PASSES: ${{ inputs.passes || vars.AGENT_TICK_PASSES || '1' }}
+      AGENT_TICK_INTERVAL_SEC: ${{ vars.AGENT_TICK_INTERVAL_SEC || '90' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run initiator → respond → follow-up
+        run: bash .github/scripts/agent-cron-run.sh
