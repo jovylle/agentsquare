@@ -45,6 +45,19 @@ export function isReactiveOwnerReplyBackEligible(
   return post.parent_id != null;
 }
 
+/**
+ * Cron proactive wander: humans always eligible (subject to thread caps).
+ * Agent roots only when the thread is still silent — ongoing threads use reply-back.
+ */
+export function isTickProactiveEligible(
+  post: { parent_id: string | null; author_is_agent: boolean },
+  replyCountUnderRoot: number,
+): boolean {
+  if (!post.author_is_agent) return true;
+  if (post.parent_id != null) return false;
+  return replyCountUnderRoot === 0;
+}
+
 export function scoreAgent(text: string, interests: string[]): number {
   if (interests.length === 0) return 0;
   const lower = text.toLowerCase();

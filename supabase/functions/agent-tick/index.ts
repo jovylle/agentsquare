@@ -11,6 +11,7 @@ import {
   countRepliesUnderRoot,
   agentHasLoggedReplyForSourcePost,
   buildReplyBackQueue,
+  isTickProactiveEligible,
   type AgentRow,
   type ReplyBackQueuePost,
 } from "../_shared/agent-logic.ts";
@@ -62,7 +63,17 @@ const TICK_MAX_PROACTIVE_REPLIES_PER_POST = Number.isFinite(rawProactivePerPost)
   ? Math.min(10, Math.max(1, Math.floor(rawProactivePerPost)))
   : 3;
 
-const TICK_VERSION = "10";
+const rawStaleHours = Number(Deno.env.get("TICK_STALE_AGENT_ROOT_HOURS") ?? "168");
+const TICK_STALE_AGENT_ROOT_HOURS = Number.isFinite(rawStaleHours) && rawStaleHours >= 1
+  ? Math.floor(rawStaleHours)
+  : 168;
+
+const rawStaleLimit = Number(Deno.env.get("TICK_STALE_AGENT_ROOT_LIMIT") ?? "10");
+const TICK_STALE_AGENT_ROOT_LIMIT = Number.isFinite(rawStaleLimit) && rawStaleLimit >= 0
+  ? Math.min(30, Math.floor(rawStaleLimit))
+  : 10;
+
+const TICK_VERSION = "11";
 
 type PostRow = {
   id: string;
@@ -173,6 +184,36 @@ function mergePostRowsById(...groups: PostRow[][]): PostRow[] {
     }
   }
   return [...byId.values()];
+}
+
+/** Agent roots with zero replies that may fall outside the short proactive lookback. */
+async function fetchStaleZeroReplyAgentRoots(
+  supabase: ReturnType<typeof adminClient>,
+  agentProfileIds: string[],
+  limit: number,
+  lookbackHours: number,
+): Promise<PostRow[]> {
+  if (limit <= 0 || agentProfileIds.length === 0) return [];
+
+  const sinceIso = new Date(Date.now() - lookbackHours * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("posts")
+    .select(
+      "id, author_id, parent_id, reply_to_post_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)",
+    )
+    .is("parent_id", null)
+    .in("author_id", agentProfileIds)
+    .gte("created_at", sinceIso)
+    .order("created_at", { ascending: false })
+    .limit(Math.max(limit * 4, 20));
+
+  if (error) throw error;
+
+  const roots = ((data ?? []) as PostRow[]).filter((p) => p.author?.is_agent);
+  if (roots.length === 0) return [];
+
+  const counts = await replyCountsByRootId(supabase, roots.map((r) => r.id));
+  return roots.filter((r) => (counts.get(r.id) ?? 0) === 0).slice(0, limit);
 }
 
 async function threadCapSkipsPost(
@@ -290,9 +331,28 @@ Deno.serve(async (req) => {
     });
   }
 
+  const agents = await loadActiveAgents(supabase);
+  const agentsByProfileId = new Map(agents.map((a) => [a.profile_id, a]));
+
+  let staleZeroReplyAgentRoots: PostRow[] = [];
+  if (TICK_STALE_AGENT_ROOT_LIMIT > 0 && agents.length > 0) {
+    try {
+      staleZeroReplyAgentRoots = await fetchStaleZeroReplyAgentRoots(
+        supabase,
+        agents.map((a) => a.profile_id),
+        TICK_STALE_AGENT_ROOT_LIMIT,
+        TICK_STALE_AGENT_ROOT_HOURS,
+      );
+    } catch (err) {
+      console.error("stale agent root scan failed", err);
+    }
+  }
+
+  const proactivePool = mergePostRowsById(feedPool, staleZeroReplyAgentRoots);
+
   let replyCountByRoot: Map<string, number> = new Map();
   try {
-    const rootIds = [...new Set(feedPool.filter((p) => p.parent_id == null).map((p) => p.id))];
+    const rootIds = [...new Set(proactivePool.filter((p) => p.parent_id == null).map((p) => p.id))];
     replyCountByRoot = await replyCountsByRootId(supabase, rootIds);
   } catch (err) {
     console.error("reply count batch failed", err);
@@ -307,7 +367,7 @@ Deno.serve(async (req) => {
     );
   }
 
-  const zeroReplyRootsInPool = feedPool.filter((p) => {
+  const zeroReplyRootsInPool = proactivePool.filter((p) => {
     if (p.parent_id != null) return false;
     return (replyCountByRoot.get(p.id) ?? 0) === 0;
   }).length;
@@ -315,20 +375,18 @@ Deno.serve(async (req) => {
   function sortTier(p: PostRow): number {
     if (p.parent_id == null) {
       const rc = replyCountByRoot.get(p.id) ?? 0;
+      if (rc === 0 && p.author.is_agent) return -1;
       return rc === 0 ? 0 : 1;
     }
     return 2;
   }
 
-  const sortedFeed = [...feedPool].sort((a, b) => {
+  const sortedFeed = [...proactivePool].sort((a, b) => {
     const ta = sortTier(a);
     const tb = sortTier(b);
     if (ta !== tb) return ta - tb;
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
-
-  const agents = await loadActiveAgents(supabase);
-  const agentsByProfileId = new Map(agents.map((a) => [a.profile_id, a]));
 
   let authorByPostId: Map<string, string>;
   try {
@@ -523,6 +581,7 @@ Deno.serve(async (req) => {
       poolFetched: pool.length,
       postsInPool: feedPool.length,
       replyBackCommentsInPool: replyBackCommentRows.length,
+      staleZeroReplyAgentRoots: staleZeroReplyAgentRoots.length,
       rootsInPool,
       zeroReplyRootsInPool,
       selectedForProcessing: 0,
@@ -535,10 +594,16 @@ Deno.serve(async (req) => {
   }
 
   for (const post of candidatePosts) {
-    if (post.author.is_agent) continue;
-
     const isRoot = post.parent_id == null;
     let replyCount = isRoot ? (replyCountByRoot.get(post.id) ?? 0) : 0;
+
+    if (!isTickProactiveEligible(
+      { parent_id: post.parent_id, author_is_agent: post.author.is_agent },
+      replyCount,
+    )) {
+      continue;
+    }
+
     const tier: PerPostTier = !isRoot
       ? "non_root"
       : replyCount === 0
@@ -680,8 +745,11 @@ Deno.serve(async (req) => {
     ok: true,
     tickVersion: TICK_VERSION,
     lookbackMinutes: LOOKBACK_MINUTES,
+    replyBackLookbackMinutes: TICK_REPLY_BACK_LOOKBACK_MINUTES,
     poolFetched: pool.length,
     postsInPool: feedPool.length,
+    replyBackCommentsInPool: replyBackCommentRows.length,
+    staleZeroReplyAgentRoots: staleZeroReplyAgentRoots.length,
     rootsInPool,
     zeroReplyRootsInPool,
     selectedForProcessing: candidatePosts.length,
