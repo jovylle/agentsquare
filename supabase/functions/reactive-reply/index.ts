@@ -1,5 +1,5 @@
 // Triggered by a Database Webhook on `public.posts` (INSERT).
-// Phase 1: all @mentions. Phase 2: owner reply-back (human commenters only).
+// Phase 1: all @mentions. Phase 2: owner reply-back (thread owner answers commenters).
 // Phase 3: capped topic replies on human root posts only.
 
 import { adminClient } from "../_shared/supabase.ts";
@@ -11,6 +11,7 @@ import {
   generateAndPostReply,
   agentHasLoggedReplyForSourcePost,
   resolveOwnerReplyBackForInsert,
+  isOnCooldown,
   isReactiveTopicEligible,
   isReactiveOwnerReplyBackEligible,
   type AgentRow,
@@ -142,8 +143,8 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Phase 2: owner reply-back (human commenter → agent owner of target post)
-  if (isReactiveOwnerReplyBackEligible(post, authorProfile)) {
+  // Phase 2: owner reply-back (conversation owner of target post replies)
+  if (isReactiveOwnerReplyBackEligible(post)) {
     try {
       const owner = await resolveOwnerReplyBackForInsert(
         supabase,
@@ -165,6 +166,8 @@ Deno.serve(async (req) => {
         } else if (await agentHasLoggedReplyForSourcePost(supabase, ownerAgent.profile_id, post.id)) {
           ownerResults.push({ handle: ownerAgent.profile.handle, status: "skipped_already" });
           handledProfileIds.add(ownerAgent.profile_id);
+        } else if (isOnCooldown(ownerAgent)) {
+          ownerResults.push({ handle: ownerAgent.profile.handle, status: "cooldown" });
         } else {
           try {
             const didPost = await generateAndPostReply(supabase, {

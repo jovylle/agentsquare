@@ -17,6 +17,11 @@ import {
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET");
 const LOOKBACK_MINUTES = Number(Deno.env.get("TICK_LOOKBACK_MINUTES") ?? "90");
+
+const rawReplyBackLookback = Number(Deno.env.get("TICK_REPLY_BACK_LOOKBACK_MINUTES") ?? "1440");
+const TICK_REPLY_BACK_LOOKBACK_MINUTES = Number.isFinite(rawReplyBackLookback) && rawReplyBackLookback >= 1
+  ? Math.floor(rawReplyBackLookback)
+  : 1440;
 const MAX_POSTS_PER_TICK = Number(Deno.env.get("TICK_MAX_POSTS") ?? "12");
 const rawPool = Number(Deno.env.get("TICK_CANDIDATE_POOL") ?? "200");
 const TICK_CANDIDATE_POOL = Number.isFinite(rawPool) && rawPool >= MAX_POSTS_PER_TICK
@@ -46,10 +51,10 @@ const OWNER_REPLY_BACK_PROBABILITY = Number.isFinite(rawOwnerP) && rawOwnerP >= 
   ? rawOwnerP
   : 0;
 
-const rawOwnerMax = Number(Deno.env.get("OWNER_REPLY_BACK_MAX_PER_TICK") ?? "2");
+const rawOwnerMax = Number(Deno.env.get("OWNER_REPLY_BACK_MAX_PER_TICK") ?? "6");
 const OWNER_REPLY_BACK_MAX_PER_TICK = Number.isFinite(rawOwnerMax)
-  ? Math.min(10, Math.max(0, Math.floor(rawOwnerMax)))
-  : 2;
+  ? Math.min(20, Math.max(0, Math.floor(rawOwnerMax)))
+  : 6;
 
 /** Max successful proactive agent replies per human/agent source post in one tick (each uses a different agent from selections). */
 const rawProactivePerPost = Number(Deno.env.get("TICK_MAX_PROACTIVE_REPLIES_PER_POST") ?? "3");
@@ -57,7 +62,7 @@ const TICK_MAX_PROACTIVE_REPLIES_PER_POST = Number.isFinite(rawProactivePerPost)
   ? Math.min(10, Math.max(1, Math.floor(rawProactivePerPost)))
   : 3;
 
-const TICK_VERSION = "9";
+const TICK_VERSION = "10";
 
 type PostRow = {
   id: string;
@@ -142,8 +147,8 @@ async function buildAuthorByPostId(
   return map;
 }
 
-function toReplyBackPosts(feedPool: PostRow[]): ReplyBackQueuePost[] {
-  return feedPool.map((p) => ({
+function toReplyBackPost(p: PostRow): ReplyBackQueuePost {
+  return {
     id: p.id,
     author_id: p.author_id,
     parent_id: p.parent_id,
@@ -153,7 +158,21 @@ function toReplyBackPosts(feedPool: PostRow[]): ReplyBackQueuePost[] {
     created_at: p.created_at,
     author_handle: p.author.handle,
     author_is_agent: p.author.is_agent,
-  }));
+  };
+}
+
+function toReplyBackPosts(feedPool: PostRow[]): ReplyBackQueuePost[] {
+  return feedPool.map(toReplyBackPost);
+}
+
+function mergePostRowsById(...groups: PostRow[][]): PostRow[] {
+  const byId = new Map<string, PostRow>();
+  for (const group of groups) {
+    for (const p of group) {
+      if (p.author) byId.set(p.id, p);
+    }
+  }
+  return [...byId.values()];
 }
 
 async function threadCapSkipsPost(
@@ -212,6 +231,38 @@ Deno.serve(async (req) => {
 
   const pool = (recentPosts ?? []) as PostRow[];
   const feedPool = pool.filter((p) => p.author);
+
+  let replyBackCommentRows: PostRow[] = [];
+  if (TICK_REPLY_BACK_LOOKBACK_MINUTES > LOOKBACK_MINUTES) {
+    const replyBackSinceIso = new Date(
+      Date.now() - TICK_REPLY_BACK_LOOKBACK_MINUTES * 60 * 1000,
+    ).toISOString();
+    const { data: replyBackPosts, error: replyBackError } = await supabase
+      .from("posts")
+      .select(
+        "id, author_id, parent_id, reply_to_post_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)",
+      )
+      .not("parent_id", "is", null)
+      .gte("created_at", replyBackSinceIso)
+      .order("created_at", { ascending: false })
+      .limit(TICK_CANDIDATE_POOL);
+
+    if (replyBackError) {
+      console.error("Failed to load reply-back comment pool", replyBackError);
+      return jsonResponse(
+        {
+          ok: false,
+          tickVersion: TICK_VERSION,
+          error: "reply_back_posts_load_failed",
+          detail: replyBackError.message,
+        },
+        500,
+      );
+    }
+    replyBackCommentRows = ((replyBackPosts ?? []) as PostRow[]).filter((p) => p.author);
+  }
+
+  const replyBackPool = mergePostRowsById(feedPool, replyBackCommentRows);
   const rootsInPool = feedPool.filter((p) => p.parent_id == null).length;
 
   if (
@@ -223,8 +274,10 @@ Deno.serve(async (req) => {
       ok: true,
       tickVersion: TICK_VERSION,
       lookbackMinutes: LOOKBACK_MINUTES,
+      replyBackLookbackMinutes: TICK_REPLY_BACK_LOOKBACK_MINUTES,
       poolFetched: pool.length,
       postsInPool: feedPool.length,
+      replyBackCommentsInPool: replyBackCommentRows.length,
       rootsInPool,
       zeroReplyRootsInPool: 0,
       selectedForProcessing: 0,
@@ -279,7 +332,7 @@ Deno.serve(async (req) => {
 
   let authorByPostId: Map<string, string>;
   try {
-    authorByPostId = await buildAuthorByPostId(supabase, feedPool);
+    authorByPostId = await buildAuthorByPostId(supabase, replyBackPool);
   } catch (err) {
     console.error("author map for reply-back failed", err);
     return jsonResponse(
@@ -294,10 +347,10 @@ Deno.serve(async (req) => {
   }
 
   const replyBackQueue = OWNER_REPLY_BACK_MAX_PER_TICK > 0
-    ? buildReplyBackQueue(toReplyBackPosts(feedPool), authorByPostId, agentsByProfileId)
+    ? buildReplyBackQueue(toReplyBackPosts(replyBackPool), authorByPostId, agentsByProfileId)
     : [];
 
-  const allPoolPostIds = [...new Set(feedPool.map((p) => p.id))];
+  const allPoolPostIds = [...new Set(replyBackPool.map((p) => p.id))];
   const touched = new Set<string>();
   if (allPoolPostIds.length > 0) {
     const { data: existingActivityAll } = await supabase
@@ -466,8 +519,10 @@ Deno.serve(async (req) => {
       ok: true,
       tickVersion: TICK_VERSION,
       lookbackMinutes: LOOKBACK_MINUTES,
+      replyBackLookbackMinutes: TICK_REPLY_BACK_LOOKBACK_MINUTES,
       poolFetched: pool.length,
       postsInPool: feedPool.length,
+      replyBackCommentsInPool: replyBackCommentRows.length,
       rootsInPool,
       zeroReplyRootsInPool,
       selectedForProcessing: 0,

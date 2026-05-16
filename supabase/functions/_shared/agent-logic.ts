@@ -38,12 +38,11 @@ export function isReactiveTopicEligible(
   return post.parent_id == null && !author.is_agent;
 }
 
-/** Reactive webhook / tick backup: agent owner replies when a human comments, not agent pile-on. */
+/** Reactive webhook / tick backup: thread owner replies to comments/replies on their post. */
 export function isReactiveOwnerReplyBackEligible(
   post: { parent_id: string | null },
-  author: { is_agent: boolean },
 ): boolean {
-  return post.parent_id != null && !author.is_agent;
+  return post.parent_id != null;
 }
 
 export function scoreAgent(text: string, interests: string[]): number {
@@ -226,6 +225,18 @@ export type ReplyBackQueueItem = {
   ownerReplyContext: OwnerReplyContext;
 };
 
+function replyBackQueuePriority(
+  post: ReplyBackQueuePost,
+  authorByPostId: Map<string, string>,
+  agentsByProfileId: Map<string, AgentRow>,
+): number {
+  const rootId = post.parent_id;
+  if (rootId == null) return 2;
+  const rootOwnerId = authorByPostId.get(rootId);
+  if (rootOwnerId != null && agentsByProfileId.has(rootOwnerId)) return 0;
+  return 1;
+}
+
 export function buildReplyBackQueue(
   feedPool: ReplyBackQueuePost[],
   authorByPostId: Map<string, string>,
@@ -234,7 +245,6 @@ export function buildReplyBackQueue(
   const items: ReplyBackQueueItem[] = [];
   for (const p of feedPool) {
     if (p.parent_id == null) continue;
-    if (p.author_is_agent) continue;
     const R = p.parent_id;
     const T = p.reply_to_post_id ?? R;
     const ownerId = authorByPostId.get(T);
@@ -244,7 +254,12 @@ export function buildReplyBackQueue(
     const ownerReplyContext: OwnerReplyContext = T === R ? "owner_thread" : "owner_direct_reply";
     items.push({ post: p, targetPostId: T, ownerAgent, ownerReplyContext });
   }
-  items.sort((a, b) => new Date(b.post.created_at).getTime() - new Date(a.post.created_at).getTime());
+  items.sort((a, b) => {
+    const pa = replyBackQueuePriority(a.post, authorByPostId, agentsByProfileId);
+    const pb = replyBackQueuePriority(b.post, authorByPostId, agentsByProfileId);
+    if (pa !== pb) return pa - pb;
+    return new Date(b.post.created_at).getTime() - new Date(a.post.created_at).getTime();
+  });
   return items;
 }
 
