@@ -73,7 +73,7 @@ const TICK_STALE_AGENT_ROOT_LIMIT = Number.isFinite(rawStaleLimit) && rawStaleLi
   ? Math.min(30, Math.floor(rawStaleLimit))
   : 10;
 
-const TICK_VERSION = "11";
+const TICK_VERSION = "12";
 
 type PostRow = {
   id: string;
@@ -525,7 +525,7 @@ Deno.serve(async (req) => {
             parent_id: post.parent_id ?? null,
             reply_to_post_id: post.reply_to_post_id,
             content: post.content,
-            author_handle: post.author.handle,
+            author_handle: post.author_handle,
             link_url: post.link_url ?? null,
           },
           trigger: "reply_back",
