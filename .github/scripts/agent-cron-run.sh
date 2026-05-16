@@ -42,43 +42,69 @@ else
   FOLLOWUP_URL="$BASE_URL/functions/v1/agent-initiator-followup"
 fi
 
+# Supabase edge + LLM can exceed 60s; avoid curl 56 (peer closed) aborting the whole cron.
+CURL_MAX_TIME_SEC="${AGENT_CURL_MAX_TIME_SEC:-180}"
+
 post_endpoint() {
   local label="$1"
   local url="$2"
-  local log_json="${3:-0}"
 
   echo "=== ${label}: ${url} ==="
-  if [[ "$log_json" == "1" ]]; then
-    RESPONSE="$(curl --fail --show-error --silent \
-      --retry 3 --retry-delay 5 \
-      -X POST \
-      -H "x-cron-secret: ${CRON_SECRET}" \
-      -H "content-type: application/json" \
-      -d '{}' \
-      "$url")"
+  local tmp
+  tmp="$(mktemp)"
+  local curl_status=0
+  curl --show-error --silent \
+    --http1.1 \
+    --max-time "$CURL_MAX_TIME_SEC" \
+    --retry 2 --retry-delay 5 \
+    -X POST \
+    -H "x-cron-secret: ${CRON_SECRET}" \
+    -H "content-type: application/json" \
+    -d '{}' \
+    -o "$tmp" \
+    -w "%{http_code}" \
+    "$url" >"${tmp}.code" || curl_status=$?
+
+  local http_code
+  http_code="$(cat "${tmp}.code" 2>/dev/null || echo "000")"
+  echo "${label} HTTP ${http_code}"
+
+  if [[ -s "$tmp" ]]; then
     echo "${label} response:"
-    echo "$RESPONSE" | jq .
+    if jq -e . "$tmp" >/dev/null 2>&1; then
+      jq . "$tmp"
+    else
+      cat "$tmp"
+    fi
   else
-    curl --fail --show-error --silent \
-      --retry 3 --retry-delay 5 \
-      -X POST \
-      -H "x-cron-secret: ${CRON_SECRET}" \
-      -H "content-type: application/json" \
-      -d '{}' \
-      "$url"
+    echo "${label} response: (empty body)"
   fi
+
+  rm -f "$tmp" "${tmp}.code"
+
+  if [[ "$curl_status" -ne 0 ]] || [[ "$http_code" -lt 200 ]] || [[ "$http_code" -ge 300 ]]; then
+    echo "WARNING: ${label} failed (curl=${curl_status}, http=${http_code})"
+    return 1
+  fi
+  return 0
 }
 
 PASSES="${AGENT_TICK_PASSES:-1}"
 INTERVAL_SEC="${AGENT_TICK_INTERVAL_SEC:-90}"
+FAILED=0
 
 for pass in $(seq 1 "$PASSES"); do
   echo "======== Pass ${pass}/${PASSES} ========"
-  post_endpoint "agent-initiator" "$INIT_URL" 0
-  post_endpoint "agent-tick" "$TICK_URL" 1
-  post_endpoint "agent-initiator-followup" "$FOLLOWUP_URL" 1
+  post_endpoint "agent-initiator" "$INIT_URL" || FAILED=1
+  post_endpoint "agent-tick" "$TICK_URL" || FAILED=1
+  post_endpoint "agent-initiator-followup" "$FOLLOWUP_URL" || FAILED=1
   if [ "$pass" -lt "$PASSES" ]; then
     echo "Sleeping ${INTERVAL_SEC}s before next pass…"
     sleep "$INTERVAL_SEC"
   fi
 done
+
+if [ "$FAILED" -ne 0 ]; then
+  echo "One or more endpoints failed; see warnings above."
+  exit 1
+fi

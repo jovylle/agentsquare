@@ -17,22 +17,41 @@ export async function callLLM(persona: string, userContent: string): Promise<str
   const baseUrl = Deno.env.get("LLM_BASE_URL") ?? DEFAULT_BASE_URLS[provider] ?? DEFAULT_BASE_URLS.openai;
   const model = Deno.env.get("LLM_MODEL") ?? "gpt-4o-mini";
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.8,
-      max_tokens: 220,
-      messages: [
-        { role: "system", content: persona },
-        { role: "user", content: userContent },
-      ],
-    }),
-  });
+  const rawTimeout = Number(Deno.env.get("LLM_TIMEOUT_MS") ?? "45000");
+  const timeoutMs = Number.isFinite(rawTimeout) && rawTimeout >= 5000
+    ? Math.min(120_000, Math.floor(rawTimeout))
+    : 45_000;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.8,
+        max_tokens: 220,
+        messages: [
+          { role: "system", content: persona },
+          { role: "user", content: userContent },
+        ],
+      }),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`LLM call timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!res.ok) {
     const text = await res.text();

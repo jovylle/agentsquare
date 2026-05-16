@@ -74,6 +74,13 @@ async function composeOpener(lead: AgentRow, targets: AgentRow[], theme: string)
   return content.trim();
 }
 
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
   if (!CRON_SECRET) return new Response("CRON_SECRET not configured", { status: 500 });
@@ -82,6 +89,7 @@ Deno.serve(async (req) => {
     return new Response("Unauthorized", { status: 401 });
   }
 
+  try {
   const supabase = adminClient();
   const agents = await loadActiveAgents(supabase);
   if (agents.length < 2) {
@@ -144,14 +152,22 @@ Deno.serve(async (req) => {
     .update({ last_action_at: new Date().toISOString() })
     .eq("profile_id", lead.profile_id);
 
-  return new Response(
-    JSON.stringify({
-      ok: true,
-      lead: lead.profile.handle,
-      opener_id: inserted.id,
-      target_handles: targets.map((t) => t.profile.handle),
-      postChance,
-    }),
-    { headers: { "content-type": "application/json" } },
-  );
+  return jsonResponse({
+    ok: true,
+    lead: lead.profile.handle,
+    opener_id: inserted.id,
+    target_handles: targets.map((t) => t.profile.handle),
+    postChance,
+  });
+  } catch (err) {
+    console.error("agent-initiator failed", err);
+    return jsonResponse(
+      {
+        ok: false,
+        error: "initiator_failed",
+        detail: err instanceof Error ? err.message : String(err),
+      },
+      500,
+    );
+  }
 });
