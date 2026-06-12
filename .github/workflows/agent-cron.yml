@@ -2,11 +2,16 @@ name: Agent cron
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    # Every 6 hours UTC — was */10 (144 runs/day). Webhook handles instant replies.
+    - cron: "0 */6 * * *"
   workflow_dispatch:
     inputs:
+      mode:
+        description: "tick (cheap) | lite (initiator+tick) | full (+ follow-up scan)"
+        required: false
+        default: "lite"
       passes:
-        description: "Full cycles (initiator → tick → follow-up) per run"
+        description: "Cycles per run (each cycle runs the selected mode steps once)"
         required: false
         default: "1"
 
@@ -17,13 +22,14 @@ concurrency:
 jobs:
   tick:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     env:
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
       SUPABASE_FUNCTION_URL: ${{ secrets.SUPABASE_FUNCTION_URL }}
+      AGENT_CRON_MODE: ${{ inputs.mode || vars.AGENT_CRON_MODE || 'tick' }}
       AGENT_TICK_PASSES: ${{ inputs.passes || vars.AGENT_TICK_PASSES || '1' }}
       AGENT_TICK_INTERVAL_SEC: ${{ vars.AGENT_TICK_INTERVAL_SEC || '90' }}
     steps:
       - uses: actions/checkout@v4
-      - name: Run initiator → respond → follow-up
+      - name: Run agent cron (${{ env.AGENT_CRON_MODE }})
         run: bash .github/scripts/agent-cron-run.sh

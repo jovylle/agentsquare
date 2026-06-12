@@ -13,7 +13,7 @@ const MAX_TARGETS = Number.isFinite(rawMax)
   : 2;
 
 /** When < 1, multiplied with each lead's `activity_settings.activityLevel` for a random skip. Default 1 = no extra gate. */
-const rawInitProb = Number(Deno.env.get("INITIATOR_POST_PROBABILITY") ?? "1");
+const rawInitProb = Number(Deno.env.get("INITIATOR_POST_PROBABILITY") ?? "0.25");
 const INITIATOR_POST_PROBABILITY = Number.isFinite(rawInitProb) && rawInitProb >= 0 && rawInitProb <= 1
   ? rawInitProb
   : 1;

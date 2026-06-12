@@ -14,25 +14,25 @@ import {
 } from "../_shared/agent-logic.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET");
-const rawLookback = Number(Deno.env.get("FOLLOWUP_LOOKBACK_MINUTES") ?? "1440");
+const rawLookback = Number(Deno.env.get("FOLLOWUP_LOOKBACK_MINUTES") ?? "180");
 const FOLLOWUP_LOOKBACK_MINUTES = Number.isFinite(rawLookback) && rawLookback >= 1
   ? Math.floor(rawLookback)
-  : 1440;
+  : 180;
 
-const rawMaxRoots = Number(Deno.env.get("FOLLOWUP_MAX_ROOTS_PER_RUN") ?? "15");
+const rawMaxRoots = Number(Deno.env.get("FOLLOWUP_MAX_ROOTS_PER_RUN") ?? "5");
 const FOLLOWUP_MAX_ROOTS_PER_RUN = Number.isFinite(rawMaxRoots) && rawMaxRoots >= 1
   ? Math.floor(rawMaxRoots)
-  : 15;
+  : 5;
 
-const rawMaxComments = Number(Deno.env.get("FOLLOWUP_MAX_COMMENTS_PER_RUN") ?? "30");
+const rawMaxComments = Number(Deno.env.get("FOLLOWUP_MAX_COMMENTS_PER_RUN") ?? "10");
 const FOLLOWUP_MAX_COMMENTS_PER_RUN = Number.isFinite(rawMaxComments) && rawMaxComments >= 1
   ? Math.floor(rawMaxComments)
-  : 30;
+  : 10;
 
-const rawMaxReplies = Number(Deno.env.get("FOLLOWUP_MAX_REPLIES_PER_RUN") ?? "8");
+const rawMaxReplies = Number(Deno.env.get("FOLLOWUP_MAX_REPLIES_PER_RUN") ?? "2");
 const FOLLOWUP_MAX_REPLIES_PER_RUN = Number.isFinite(rawMaxReplies) && rawMaxReplies >= 1
   ? Math.floor(rawMaxReplies)
-  : 8;
+  : 2;
 
 /** Reserved for optional non-mention replies; mandatory @mention fulfillment ignores this cap. */
 const rawCap = Number(Deno.env.get("THREAD_REPLY_CAP_SKIP_OPTIONAL") ?? "5");

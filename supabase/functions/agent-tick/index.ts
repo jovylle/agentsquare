@@ -17,17 +17,17 @@ import {
 } from "../_shared/agent-logic.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET");
-const LOOKBACK_MINUTES = Number(Deno.env.get("TICK_LOOKBACK_MINUTES") ?? "90");
+const LOOKBACK_MINUTES = Number(Deno.env.get("TICK_LOOKBACK_MINUTES") ?? "30");
 
-const rawReplyBackLookback = Number(Deno.env.get("TICK_REPLY_BACK_LOOKBACK_MINUTES") ?? "1440");
+const rawReplyBackLookback = Number(Deno.env.get("TICK_REPLY_BACK_LOOKBACK_MINUTES") ?? "180");
 const TICK_REPLY_BACK_LOOKBACK_MINUTES = Number.isFinite(rawReplyBackLookback) && rawReplyBackLookback >= 1
   ? Math.floor(rawReplyBackLookback)
-  : 1440;
-const MAX_POSTS_PER_TICK = Number(Deno.env.get("TICK_MAX_POSTS") ?? "12");
-const rawPool = Number(Deno.env.get("TICK_CANDIDATE_POOL") ?? "200");
+  : 180;
+const MAX_POSTS_PER_TICK = Number(Deno.env.get("TICK_MAX_POSTS") ?? "3");
+const rawPool = Number(Deno.env.get("TICK_CANDIDATE_POOL") ?? "50");
 const TICK_CANDIDATE_POOL = Number.isFinite(rawPool) && rawPool >= MAX_POSTS_PER_TICK
   ? Math.floor(rawPool)
-  : Math.max(200, MAX_POSTS_PER_TICK);
+  : Math.max(50, MAX_POSTS_PER_TICK);
 
 /** When recent posts in the lookback pool (all authors) exceed this count, randomly skip the whole tick with probability (1 - multiplier). 0 = disabled. */
 const rawBusy = Number(Deno.env.get("HUMAN_ACTIVITY_BUSY_MIN_POSTS") ?? "0");
@@ -52,26 +52,26 @@ const OWNER_REPLY_BACK_PROBABILITY = Number.isFinite(rawOwnerP) && rawOwnerP >= 
   ? rawOwnerP
   : 0;
 
-const rawOwnerMax = Number(Deno.env.get("OWNER_REPLY_BACK_MAX_PER_TICK") ?? "6");
+const rawOwnerMax = Number(Deno.env.get("OWNER_REPLY_BACK_MAX_PER_TICK") ?? "1");
 const OWNER_REPLY_BACK_MAX_PER_TICK = Number.isFinite(rawOwnerMax)
-  ? Math.min(20, Math.max(0, Math.floor(rawOwnerMax)))
-  : 6;
+  ? Math.min(10, Math.max(0, Math.floor(rawOwnerMax)))
+  : 1;
 
 /** Max successful proactive agent replies per human/agent source post in one tick (each uses a different agent from selections). */
-const rawProactivePerPost = Number(Deno.env.get("TICK_MAX_PROACTIVE_REPLIES_PER_POST") ?? "3");
+const rawProactivePerPost = Number(Deno.env.get("TICK_MAX_PROACTIVE_REPLIES_PER_POST") ?? "1");
 const TICK_MAX_PROACTIVE_REPLIES_PER_POST = Number.isFinite(rawProactivePerPost)
   ? Math.min(10, Math.max(1, Math.floor(rawProactivePerPost)))
-  : 3;
+  : 1;
 
 const rawStaleHours = Number(Deno.env.get("TICK_STALE_AGENT_ROOT_HOURS") ?? "168");
 const TICK_STALE_AGENT_ROOT_HOURS = Number.isFinite(rawStaleHours) && rawStaleHours >= 1
   ? Math.floor(rawStaleHours)
   : 168;
 
-const rawStaleLimit = Number(Deno.env.get("TICK_STALE_AGENT_ROOT_LIMIT") ?? "10");
+const rawStaleLimit = Number(Deno.env.get("TICK_STALE_AGENT_ROOT_LIMIT") ?? "3");
 const TICK_STALE_AGENT_ROOT_LIMIT = Number.isFinite(rawStaleLimit) && rawStaleLimit >= 0
   ? Math.min(30, Math.floor(rawStaleLimit))
-  : 10;
+  : 3;
 
 const TICK_VERSION = "12";
 

@@ -35,15 +35,15 @@ type WebhookPayload = {
 const WEBHOOK_SECRET = Deno.env.get("WEBHOOK_SECRET");
 const REACTIVE_VERSION = "3";
 
-const rawReactiveMax = Number(Deno.env.get("REACTIVE_MAX_REPLIES") ?? "3");
+const rawReactiveMax = Number(Deno.env.get("REACTIVE_MAX_REPLIES") ?? "1");
 const REACTIVE_MAX_REPLIES = Number.isFinite(rawReactiveMax)
   ? Math.min(10, Math.max(1, Math.floor(rawReactiveMax)))
-  : 3;
+  : 1;
 
-const rawMentionMax = Number(Deno.env.get("REACTIVE_MAX_MENTION_REPLIES") ?? "10");
+const rawMentionMax = Number(Deno.env.get("REACTIVE_MAX_MENTION_REPLIES") ?? "3");
 const REACTIVE_MAX_MENTION_REPLIES = Number.isFinite(rawMentionMax)
   ? Math.min(10, Math.max(1, Math.floor(rawMentionMax)))
-  : 10;
+  : 3;
 
 type PhaseResult = { handle: string; status: string };
 
