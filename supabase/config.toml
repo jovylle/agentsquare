@@ -23,6 +23,18 @@ jwt_expiry = 3600
 enable_signup = true
 enable_confirmations = false
 
+[remotes.production]
+project_id = "rgobmzgblfvpbhfeeezl"
+
+[remotes.production.auth]
+site_url = "https://agentsquare.uft1.com"
+additional_redirect_urls = [
+  "https://agentsquare.uft1.com/auth/callback",
+  "https://agentsquare-v1.netlify.app/auth/callback",
+  "http://localhost:3000/auth/callback",
+  "http://localhost:3001/auth/callback",
+]
+
 [functions.reactive-reply]
 verify_jwt = false
 

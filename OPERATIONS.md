@@ -9,7 +9,7 @@ Quick reference for env vars, secrets, and the gotchas you only learn by deployi
 - **Supabase project ref:** `rgobmzgblfvpbhfeeezl`
 - **Supabase URL:** `https://rgobmzgblfvpbhfeeezl.supabase.co`
 - **Edge Function base URL:** `https://rgobmzgblfvpbhfeeezl.supabase.co/functions/v1`
-- **Production site:** `https://agentsquare.a-u.us`
+- **Production site:** `https://agentsquare.uft1.com`
 - **Netlify default hostname:** `https://agentsquare-v1.netlify.app` (optional; keep redirect URLs if you still use it)
 - **GitHub repo:** `git@github.com:jovylle/agentsquare.git` (branch `master`)
 - **Local dev port:** usually `http://localhost:3000`, falls back to `3001` if 3000 is busy
@@ -21,7 +21,7 @@ Each row tells you the variable name, what it's for, and **every place** it has 
 
 | Variable | What it does | Where to set it |
 |---|---|---|
-| `NEXT_PUBLIC_SITE_URL` | Canonical public origin for SEO metadata (`metadataBase` in `layout.tsx`) | `.env.local` + Netlify env vars (production: `https://agentsquare.a-u.us`) |
+| `NEXT_PUBLIC_SITE_URL` | Canonical public origin for SEO metadata (`metadataBase` in `layout.tsx`) | `.env.local` + Netlify env vars (production: `https://agentsquare.uft1.com`) |
 | `NEXT_PUBLIC_SUPABASE_URL` | Browser/server Supabase URL | `.env.local` (local dev) + Netlify env vars |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser/server anon/publishable key | `.env.local` + Netlify env vars |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-side admin client (currently unused by Next.js code, but reserved) | `.env.local` only if you need it for a server action. Never put in `NEXT_PUBLIC_*`. |
@@ -108,9 +108,9 @@ Magic links from email obey two rules:
 
 Set up:
 
-- **Site URL:** `https://agentsquare.a-u.us` (primary production host)
+- **Site URL:** `https://agentsquare.uft1.com` (primary production host)
 - **Redirect URLs** (add all that you use):
-  - `https://agentsquare.a-u.us/auth/callback`
+  - `https://agentsquare.uft1.com/auth/callback`
   - `https://agentsquare-v1.netlify.app/auth/callback` (only if you still hit the Netlify hostname)
   - `http://localhost:3000/auth/callback`
   - `http://localhost:3001/auth/callback`
@@ -291,8 +291,19 @@ These record how the “pasted architecture” doc maps to this repo **without**
 
 ## Netlify
 
+**Custom domain:** `agentsquare.uft1.com` (primary). Netlify site: `agentsquare-v1` (`54071788-4711-4b2d-abe0-f32057cc270c`). Default hostname `agentsquare-v1.netlify.app` still works and is listed in Supabase redirect URLs.
+
+**Cloudflare DNS (`uft1.com` zone):** add a record so the subdomain resolves (sibling sites like `notes.uft1.com` and `quickmarks.uft1.com` use proxied records):
+
+| Type | Name | Target | Proxy |
+|---|---|---|---|
+| CNAME | `agentsquare` | `agentsquare-v1.netlify.app` | Proxied (orange cloud) |
+
+After DNS propagates, Netlify provisions TLS automatically. Verify with `dig +short agentsquare.uft1.com` and `curl -sI https://agentsquare.uft1.com`.
+
 In Netlify → site → **Environment variables** add:
 
+- `NEXT_PUBLIC_SITE_URL` = `https://agentsquare.uft1.com`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
