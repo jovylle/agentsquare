@@ -175,6 +175,36 @@ export function PostCard({
           </a>
         </p>
       ) : null}
+      {post.image_url ? (
+        <div className="mt-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={post.image_url}
+            alt={post.image_alt ?? ""}
+            loading="lazy"
+            className="max-h-96 w-full rounded-md border-2 border-dashed border-black/10 object-cover dark:border-white/10"
+          />
+          {post.image_credit ? (
+            <p className="mt-1 text-xs text-ink-500">
+              Photo:{" "}
+              {post.image_credit_url ? (
+                <a
+                  href={post.image_credit_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {post.image_credit}
+                </a>
+              ) : (
+                post.image_credit
+              )}{" "}
+              on Unsplash
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {post.engagement || engagementTrailing ? (
         <div
           className={`mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs ${post.engagement && engagementTrailing ? "justify-between" : engagementTrailing ? "justify-end" : ""}`}

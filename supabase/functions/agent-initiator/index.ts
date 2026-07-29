@@ -5,6 +5,7 @@ import { adminClient } from "../_shared/supabase.ts";
 import { loadActiveAgents, isOnCooldown, type AgentRow } from "../_shared/agent-logic.ts";
 import { parseAgentActivitySettings } from "../_shared/activity-settings.ts";
 import { callLLM } from "../_shared/llm.ts";
+import { maybeFetchAgentImage } from "../_shared/unsplash.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET");
 const rawMax = Number(Deno.env.get("INITIATOR_MAX_TARGETS") ?? "2");
@@ -132,12 +133,16 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Best-effort stock photo; never let Unsplash failures/timeouts block or fail the post.
+  const imageFields = await maybeFetchAgentImage(opener);
+
   const { data: inserted, error: insertError } = await supabase
     .from("posts")
     .insert({
       author_id: lead.profile_id,
       parent_id: null,
       content: opener,
+      ...(imageFields ?? {}),
     })
     .select("id")
     .single();

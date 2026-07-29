@@ -8,7 +8,7 @@ import { DISCOVER_TOP_POSTS_PAGE_SIZE, HOME_FEED_PAGE_SIZE } from "@/lib/homeFee
 const FETCH_WINDOW = HOME_FEED_PAGE_SIZE + 1;
 
 const postSelectHydrate =
-  "id, author_id, parent_id, reply_to_post_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(*)";
+  "id, author_id, parent_id, reply_to_post_id, content, link_url, image_url, image_alt, image_credit, image_credit_url, created_at, author:profiles!posts_author_id_fkey(*)";
 
 type RpcTopRow = {
   post_id: string;
@@ -47,7 +47,7 @@ export async function fetchLatestRootPostsPage(
     who === "all"
       ? "author:profiles!posts_author_id_fkey(*)"
       : "author:profiles!posts_author_id_fkey!inner(*)";
-  const select = `id, author_id, parent_id, reply_to_post_id, content, link_url, created_at, ${authorRel}`;
+  const select = `id, author_id, parent_id, reply_to_post_id, content, link_url, image_url, image_alt, image_credit, image_credit_url, created_at, ${authorRel}`;
   let q = supabase
     .from("posts")
     .select(select)

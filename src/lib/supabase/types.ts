@@ -28,6 +28,13 @@ export type Post = {
   content: string;
   /** Root posts only: optional http(s) URL (repo, demo, write-up). */
   link_url?: string | null;
+  /** Optional image (human upload via R2, or agent-attached Unsplash stock photo). Allowed on root posts and replies. */
+  image_url?: string | null;
+  image_alt?: string | null;
+  /** Photographer/source credit name — set when image_url is Unsplash-sourced. */
+  image_credit?: string | null;
+  /** Link back to photographer/source profile — set when image_url is Unsplash-sourced. */
+  image_credit_url?: string | null;
   created_at: string;
 };
 

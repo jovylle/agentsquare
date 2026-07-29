@@ -30,6 +30,11 @@ type AgentMention = { handle: string; display_name: string };
 const ROOT_DESCRIPTION_MIN = 80;
 const MAX_LINK_LEN = 2048;
 
+/** Images are allowed on root posts and replies alike (unlike link_url, which is root-only). */
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGE_ALT_LEN = 300;
+
 function normalizeOptionalHttpUrl(raw: string): string | null {
   const t = raw.trim();
   if (!t) return null;
@@ -75,6 +80,140 @@ export const PostComposer = forwardRef<PostComposerHandle, Props>(function PostC
   const [highlightIdx, setHighlightIdx] = useState(0);
   /** After Escape, hide the menu until the @-token text changes. */
   const mentionHiddenToken = useRef<string | null>(null);
+
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [imageAlt, setImageAlt] = useState("");
+  const [imageError, setImageError] = useState<string | null>(null);
+  /**
+   * Caches a successful upload (keyed to the exact File it came from) so a failed post
+   * insert can be retried without re-uploading a duplicate object to R2. Cleared (and the
+   * R2 object best-effort deleted) once the user removes or replaces the staged image, or
+   * once the post insert actually succeeds.
+   */
+  const [uploadedImage, setUploadedImage] = useState<{ file: File; key: string; publicUrl: string } | null>(
+    null,
+  );
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function deleteUploadedImageBestEffort(key: string) {
+    try {
+      await fetch("/api/upload-image", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ key }),
+      });
+    } catch (err) {
+      console.error("Failed to clean up orphaned image upload", err);
+    }
+  }
+
+  useEffect(() => {
+    if (!imageFile) {
+      setImagePreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(imageFile);
+    setImagePreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [imageFile]);
+
+  const stageImage = useCallback(
+    (file: File) => {
+      setImageError(null);
+      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        setImageError("Use a JPEG, PNG, WebP, or GIF image.");
+        return;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        setImageError(`Image must be ${Math.floor(MAX_IMAGE_BYTES / (1024 * 1024))}MB or smaller.`);
+        return;
+      }
+      // Replacing a previously-uploaded image: that object is now orphaned, clean it up.
+      if (uploadedImage) {
+        void deleteUploadedImageBestEffort(uploadedImage.key);
+        setUploadedImage(null);
+      }
+      setImageFile(file);
+    },
+    [uploadedImage],
+  );
+
+  /** Resets staged-image state after the post insert actually succeeds — no delete needed. */
+  function clearStagedImage() {
+    setImageFile(null);
+    setImageAlt("");
+    setImageError(null);
+    setUploadedImage(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  /** "Remove image" button: if an upload already completed, clean up the now-orphaned object. */
+  function removeStagedImage() {
+    if (uploadedImage) {
+      void deleteUploadedImageBestEffort(uploadedImage.key);
+    }
+    clearStagedImage();
+  }
+
+  function onImagePickerChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) stageImage(file);
+    e.target.value = "";
+  }
+
+  function onTextareaPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          stageImage(file);
+        }
+        return;
+      }
+    }
+  }
+
+  /**
+   * Uploads the staged image straight to R2 via a short-lived presigned POST policy (which,
+   * unlike a presigned PUT URL, can enforce a content-length-range server-side), then returns
+   * the object key + public URL to store on the post. Throws on any failure — the caller
+   * decides whether that should block the post.
+   */
+  async function uploadStagedImage(file: File): Promise<{ key: string; publicUrl: string }> {
+    const presignRes = await fetch("/api/upload-image", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ contentType: file.type, fileSize: file.size }),
+    });
+    const presignBody = await presignRes.json().catch(() => null);
+    if (
+      !presignRes.ok ||
+      !presignBody?.url ||
+      !presignBody?.fields ||
+      !presignBody?.publicUrl ||
+      !presignBody?.key
+    ) {
+      throw new Error(presignBody?.error || "Could not prepare image upload.");
+    }
+    const formData = new FormData();
+    for (const [field, value] of Object.entries(presignBody.fields as Record<string, string>)) {
+      formData.append(field, value);
+    }
+    // The file field must come after the policy fields for S3-compatible POST uploads.
+    formData.append("file", file);
+    const uploadRes = await fetch(presignBody.url, {
+      method: "POST",
+      body: formData,
+    });
+    if (!uploadRes.ok) {
+      throw new Error("Image upload failed. Try again.");
+    }
+    return { key: presignBody.key as string, publicUrl: presignBody.publicUrl as string };
+  }
 
   const isRoot = !parentId;
   const trimmed = content.trim();
@@ -189,6 +328,10 @@ export const PostComposer = forwardRef<PostComposerHandle, Props>(function PostC
         return;
       }
     }
+    if (imageFile && imageError) {
+      setError(imageError);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     const supabase = createClient();
@@ -211,12 +354,33 @@ export const PostComposer = forwardRef<PostComposerHandle, Props>(function PostC
       return;
     }
 
+    let imageUrl: string | null = null;
+    if (imageFile) {
+      try {
+        // Retrying after a prior insert failure with the same file: reuse the already-
+        // uploaded object instead of uploading a duplicate.
+        if (uploadedImage && uploadedImage.file === imageFile) {
+          imageUrl = uploadedImage.publicUrl;
+        } else {
+          const uploaded = await uploadStagedImage(imageFile);
+          setUploadedImage({ file: imageFile, key: uploaded.key, publicUrl: uploaded.publicUrl });
+          imageUrl = uploaded.publicUrl;
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Image upload failed.");
+        setSubmitting(false);
+        return;
+      }
+    }
+
     const row: {
       author_id: string;
       parent_id: string | null;
       reply_to_post_id: string | null;
       content: string;
       link_url?: string | null;
+      image_url?: string | null;
+      image_alt?: string | null;
     } = {
       author_id: profile.id,
       parent_id: parentId ?? null,
@@ -226,16 +390,26 @@ export const PostComposer = forwardRef<PostComposerHandle, Props>(function PostC
     if (isRoot) {
       row.link_url = normalizedLink;
     }
+    if (imageUrl) {
+      row.image_url = imageUrl;
+      row.image_alt = imageAlt.trim().slice(0, MAX_IMAGE_ALT_LEN) || null;
+    }
 
     const { error: insertError } = await supabase.from("posts").insert(row);
     setSubmitting(false);
     if (insertError) {
       setError(insertError.message);
+      // Deliberately do not delete an already-uploaded image here: uploadedImage stays
+      // cached so a retry reuses the same object instead of re-uploading (see
+      // uploadStagedImage above) and instead of leaving a post with a dead image_url.
+      // The R2 object is only cleaned up once the user removes/replaces the image
+      // (removeStagedImage / stageImage) or the insert eventually succeeds.
       return;
     }
     setContent("");
     setLinkUrl("");
     setCursor(0);
+    clearStagedImage();
     onPosted?.();
     router.refresh();
   }
@@ -292,6 +466,7 @@ export const PostComposer = forwardRef<PostComposerHandle, Props>(function PostC
           onClick={(e) => syncCursorFromEl(e.currentTarget)}
           onKeyUp={(e) => syncCursorFromEl(e.currentTarget)}
           onKeyDown={onTextareaKeyDown}
+          onPaste={onTextareaPaste}
           placeholder={
             placeholder ??
             (isRoot
@@ -330,6 +505,55 @@ export const PostComposer = forwardRef<PostComposerHandle, Props>(function PostC
             ))}
           </ul>
         ) : null}
+      </div>
+      <div className="mt-3">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={ALLOWED_IMAGE_TYPES.join(",")}
+          onChange={onImagePickerChange}
+          className="hidden"
+        />
+        {!imagePreviewUrl ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-ghost px-3 py-1.5 text-xs"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Add image
+            </button>
+            <span className="text-xs text-ink-500">or paste (Ctrl/Cmd+V) an image into the text box</span>
+          </div>
+        ) : (
+          <div className="flex items-start gap-3">
+            <div className="relative inline-block">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={imagePreviewUrl}
+                alt="Staged upload preview"
+                className="max-h-32 rounded-md border-2 border-dashed border-black/15 object-cover dark:border-white/10"
+              />
+              <button
+                type="button"
+                onClick={removeStagedImage}
+                aria-label="Remove image"
+                className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-ink-900 text-xs font-bold leading-none text-white shadow"
+              >
+                ×
+              </button>
+            </div>
+            <input
+              type="text"
+              value={imageAlt}
+              onChange={(e) => setImageAlt(e.target.value)}
+              placeholder="Describe the image (optional alt text)"
+              maxLength={MAX_IMAGE_ALT_LEN}
+              className="field text-sm"
+            />
+          </div>
+        )}
+        {imageError ? <p className="mt-1 text-xs text-red-400">{imageError}</p> : null}
       </div>
       {isRoot ? (
         <div className="mt-3">

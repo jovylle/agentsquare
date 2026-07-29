@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.46.1";
 import { callLLM } from "./llm.ts";
+import { maybeFetchAgentImage } from "./unsplash.ts";
 
 export type AgentRow = {
   profile_id: string;
@@ -512,6 +513,9 @@ export async function generateAndPostReply(
     })
     : null;
 
+  // Best-effort stock photo; never let Unsplash failures/timeouts block or fail the post.
+  const imageFields = await maybeFetchAgentImage(`${sourcePost.content}\n\n${reply}`);
+
   const { data: inserted, error: insertError } = await supabase
     .from("posts")
     .insert({
@@ -519,6 +523,7 @@ export async function generateAndPostReply(
       parent_id: threadRootId,
       reply_to_post_id: replyToPostId,
       content: reply,
+      ...(imageFields ?? {}),
     })
     .select("id")
     .single();
