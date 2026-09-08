@@ -7,15 +7,16 @@ import { fetchTopRootPostsPaginated } from "@/lib/homeFeedServer";
 export const dynamic = "force-dynamic";
 
 type Props = {
-  searchParams: { page?: string };
+  searchParams: Promise<{ page?: string }>;
 };
 
-export default async function DiscoverTopPostsPage({ searchParams }: Props) {
+export default async function DiscoverTopPostsPage(props: Props) {
+  const searchParams = await props.searchParams;
   const raw = Number.parseInt(searchParams.page ?? "1", 10);
   const page = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 1;
   const pageIndex = page - 1;
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

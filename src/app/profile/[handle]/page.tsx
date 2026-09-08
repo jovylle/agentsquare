@@ -9,7 +9,7 @@ import { timeAgo } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: { handle: string } };
+type Props = { params: Promise<{ handle: string }> };
 
 type AgentMeta = {
   persona_prompt: string;
@@ -31,8 +31,9 @@ function activityTriggerLabel(t: ActivityRow["trigger_type"]): string {
   return t;
 }
 
-export default async function ProfilePage({ params }: Props) {
-  const supabase = createClient();
+export default async function ProfilePage(props: Props) {
+  const params = await props.params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -7,7 +7,7 @@ import { mapTopCreatorRows } from "@/lib/topCreators";
 export const dynamic = "force-dynamic";
 
 type Props = {
-  searchParams: { tab?: string };
+  searchParams: Promise<{ tab?: string }>;
 };
 
 function chip(active: boolean) {
@@ -16,20 +16,34 @@ function chip(active: boolean) {
     : "rounded-md px-3 py-1.5 text-xs text-ink-400 hover:bg-black/[0.04] hover:text-ink-200 dark:hover:bg-white/5";
 }
 
-export default async function DiscoverTopCreatorsPage({ searchParams }: Props) {
-  const tab = searchParams.tab === "agents" ? "agents" : "humans";
+export default async function DiscoverTopCreatorsPage(props: Props) {
+  const searchParams = await props.searchParams;
+  const tab = searchParams.tab === "humans" ? "humans" : "agents";
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const supabase = createClient();
+  const supabase = await createClient();
 
-  const { data, error } = await supabase.rpc("top_root_creators", {
-    p_since: weekAgo,
-    p_limit: DISCOVER_TOP_CREATORS_LIMIT,
-    p_is_agent: tab === "agents",
-  });
-  if (error) {
-    console.error("top_root_creators discover", error);
-  }
-  const rows = mapTopCreatorRows(data);
+  // Fetch both tabs so we can conditionally show/hide
+  const [humanResult, agentResult] = await Promise.all([
+    supabase.rpc("top_root_creators", {
+      p_since: weekAgo,
+      p_limit: DISCOVER_TOP_CREATORS_LIMIT,
+      p_is_agent: false,
+    }),
+    supabase.rpc("top_root_creators", {
+      p_since: weekAgo,
+      p_limit: DISCOVER_TOP_CREATORS_LIMIT,
+      p_is_agent: true,
+    }),
+  ]);
+
+  const humanRows = mapTopCreatorRows(humanResult.data);
+  const agentRows = mapTopCreatorRows(agentResult.data);
+  const rows = tab === "humans" ? humanRows : agentRows;
+  const hasHumans = humanRows.length > 0;
+  const hasAgents = agentRows.length > 0;
+
+  if (humanResult.error) console.error("top_root_creators humans", humanResult.error);
+  if (agentResult.error) console.error("top_root_creators agents", agentResult.error);
 
   return (
     <div className="space-y-6">
@@ -47,12 +61,16 @@ export default async function DiscoverTopCreatorsPage({ searchParams }: Props) {
       </div>
       <section className="glass space-y-3 p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Link href="/discover/top-creators" className={chip(tab === "humans")}>
-            Top humans
-          </Link>
-          <Link href="/discover/top-creators?tab=agents" className={chip(tab === "agents")}>
-            Top agents
-          </Link>
+          {hasHumans ? (
+            <Link href="/discover/top-creators" className={chip(tab === "humans")}>
+              Top humans
+            </Link>
+          ) : null}
+          {hasAgents ? (
+            <Link href="/discover/top-creators?tab=agents" className={chip(tab === "agents")}>
+              Top agents
+            </Link>
+          ) : null}
         </div>
         <TopCreatorsList rows={rows} showAiBadge={tab === "agents"} />
       </section>

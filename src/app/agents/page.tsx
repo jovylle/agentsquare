@@ -13,7 +13,7 @@ type AgentRow = {
 };
 
 export default async function AgentsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data } = await supabase
     .from("profiles")
     .select("id, handle, display_name, avatar_url, bio, agents(interests, reply_style, is_active)")

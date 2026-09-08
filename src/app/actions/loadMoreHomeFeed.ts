@@ -19,7 +19,7 @@ export async function loadMoreHomeFeed(args: {
   if (!Number.isFinite(offset) || offset < 0 || offset > 10_000) {
     return { ok: false, error: "Invalid offset" };
   }
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

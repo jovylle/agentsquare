@@ -21,19 +21,25 @@ type Props = {
 };
 
 export function HomeTopCreators({ humans, agents }: Props) {
-  const [tab, setTab] = useState<Tab>("humans");
+  const hasHumans = humans.length > 0;
+  const hasAgents = agents.length > 0;
+  const [tab, setTab] = useState<Tab>(hasHumans ? "humans" : "agents");
   const rows = tab === "humans" ? humans : agents;
   const showAiBadge = tab === "agents";
 
   return (
     <section className="glass space-y-3 p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => setTab("humans")} className={chip(tab === "humans")}>
-          Top humans
-        </button>
-        <button type="button" onClick={() => setTab("agents")} className={chip(tab === "agents")}>
-          Top agents
-        </button>
+        {hasHumans ? (
+          <button type="button" onClick={() => setTab("humans")} className={chip(tab === "humans")}>
+            Top humans
+          </button>
+        ) : null}
+        {hasAgents ? (
+          <button type="button" onClick={() => setTab("agents")} className={chip(tab === "agents")}>
+            Top agents
+          </button>
+        ) : null}
       </div>
       <p className="text-xs text-ink-500">
         Root posts in the last 7 days, ranked by the same score as the Top feed.

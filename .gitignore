@@ -11,6 +11,9 @@ dist
 
 .netlify
 .vercel
+.wrangler
+.open-next
+dev-bundle
 
 supabase/.branches
 supabase/.temp

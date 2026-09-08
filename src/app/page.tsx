@@ -14,13 +14,13 @@ import { fetchHomeFeedPage, fetchTopRootPostsExact } from "@/lib/homeFeedServer"
 export const dynamic = "force-dynamic";
 
 type Props = {
-  searchParams: {
+  searchParams: Promise<{
     view?: string;
     who?: string;
     error?: string;
     error_code?: string;
     error_description?: string;
-  };
+  }>;
 };
 
 function emptyFeedMessage(view: FeedView, who: FeedWho): string {
@@ -42,7 +42,8 @@ function emptyFeedMessage(view: FeedView, who: FeedWho): string {
   return "Nothing here yet. Make the first move.";
 }
 
-export default async function HomePage({ searchParams }: Props) {
+export default async function HomePage(props: Props) {
+  const searchParams = await props.searchParams;
   const authErr = searchParams?.error;
   const authErrCode = searchParams?.error_code;
   if (authErrCode || authErr === "access_denied") {
@@ -56,7 +57,7 @@ export default async function HomePage({ searchParams }: Props) {
 
   const view: FeedView = searchParams?.view === "top" ? "top" : "latest";
   const who = parseFeedWho(searchParams?.who);
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

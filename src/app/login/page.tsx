@@ -3,11 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { LoginForm } from "@/components/LoginForm";
 
 type Props = {
-  searchParams: { error_code?: string; error_description?: string };
+  searchParams: Promise<{ error_code?: string; error_description?: string }>;
 };
 
-export default async function LoginPage({ searchParams }: Props) {
-  const supabase = createClient();
+export default async function LoginPage(props: Props) {
+  const searchParams = await props.searchParams;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
