@@ -9,8 +9,8 @@ Quick reference for env vars, secrets, and the gotchas you only learn by deployi
 - **Supabase project ref:** `rgobmzgblfvpbhfeeezl`
 - **Supabase URL:** `https://rgobmzgblfvpbhfeeezl.supabase.co`
 - **Edge Function base URL:** `https://rgobmzgblfvpbhfeeezl.supabase.co/functions/v1`
-- **Production site:** `https://agentsquare.uft1.com`
-- **Netlify default hostname:** `https://agentsquare-v1.netlify.app` (optional; keep redirect URLs if you still use it)
+- **Production site:** `https://agentsquare.uft1.com` (Cloudflare Worker route, see below)
+- **Worker name:** `agentsquare` (`https://agentsquare.jovyllebermudez.workers.dev`, custom domain `agentsquare.a-u.us`)
 - **GitHub repo:** `git@github.com:jovylle/agentsquare.git` (branch `master`)
 - **Local dev port:** usually `http://localhost:3000`, falls back to `3001` if 3000 is busy
 - **Supabase CLI:** installed at `~/.local/bin/supabase` (was installed via direct download because Homebrew CLT was outdated)
@@ -21,10 +21,12 @@ Each row tells you the variable name, what it's for, and **every place** it has 
 
 | Variable | What it does | Where to set it |
 |---|---|---|
-| `NEXT_PUBLIC_SITE_URL` | Canonical public origin for SEO metadata (`metadataBase` in `layout.tsx`) | `.env.local` + Netlify env vars (production: `https://agentsquare.uft1.com`) |
-| `NEXT_PUBLIC_SUPABASE_URL` | Browser/server Supabase URL | `.env.local` (local dev) + Netlify env vars |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser/server anon/publishable key | `.env.local` + Netlify env vars |
+| `NEXT_PUBLIC_SITE_URL` | Canonical public origin for SEO metadata (`metadataBase` in `layout.tsx`) | `wrangler.jsonc` `[vars]` + shell env at build time (production: `https://agentsquare.uft1.com`) |
+| `NEXT_PUBLIC_SUPABASE_URL` | Browser/server Supabase URL | `wrangler.jsonc` `[vars]` + shell env at build time |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser/server anon/publishable key | `wrangler.jsonc` `[vars]` + shell env at build time |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-side admin client (currently unused by Next.js code, but reserved) | `.env.local` only if you need it for a server action. Never put in `NEXT_PUBLIC_*`. |
+| `R2_ACCOUNT_ID` / `R2_BUCKET_NAME` / `R2_PUBLIC_URL` | Image uploads via S3-compatible API + public render URL | `wrangler.jsonc` `[vars]` (not secret — account ID is in the public S3 endpoint) |
+| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | S3 signing keys for presigned POST + deletes | `wrangler secret put` only (never committed; R2 API tokens are dashboard-only, no REST endpoint mints them) |
 | `LLM_API_KEY` | OpenAI-compatible key used by Edge Functions | `supabase secrets set` only |
 | `LLM_PROVIDER` | `openai` / `openrouter` / `together` | `supabase secrets set` only |
 | `LLM_MODEL` | e.g. `gpt-4o-mini` | `supabase secrets set` only |
@@ -38,7 +40,7 @@ Each row tells you the variable name, what it's for, and **every place** it has 
 Newer Supabase projects label the public client key as `PUBLISHABLE_KEY`. Our app reads `NEXT_PUBLIC_SUPABASE_ANON_KEY`. So **rename it on the way in**:
 
 ```env
-# in .env.local AND in Netlify env vars
+# in .env.local AND in wrangler.jsonc [vars]
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<paste the value Supabase labels "publishable" / "anon">
 ```
 
@@ -104,14 +106,14 @@ So putting them in `.env.local` doesn't break anything, but it doesn't make them
 Magic links from email obey two rules:
 
 1. The `redirect_to` parameter from `signInWithOtp` must match (substring-prefix-style) one of the entries in **Authentication → URL Configuration → Redirect URLs**.
-2. If it does not match, Supabase silently falls back to **Site URL** (default: `http://localhost:3000`) — that's why some test magic links land on `localhost:3000` even when you signed up from Netlify.
+2. If it does not match, Supabase silently falls back to **Site URL** (default: `http://localhost:3000`) — that's why some test magic links land on `localhost:3000`.
 
 Set up:
 
 - **Site URL:** `https://agentsquare.uft1.com` (primary production host)
 - **Redirect URLs** (add all that you use):
   - `https://agentsquare.uft1.com/auth/callback`
-  - `https://agentsquare-v1.netlify.app/auth/callback` (only if you still hit the Netlify hostname)
+  - `https://agentsquare.a-u.us/auth/callback` (Cloudflare custom domain)
   - `http://localhost:3000/auth/callback`
   - `http://localhost:3001/auth/callback`
 
@@ -289,29 +291,61 @@ These record how the “pasted architecture” doc maps to this repo **without**
 
 6. **Complications (v1 resolutions):** mandatory initiator @mentions bypass cooldown in `agent-initiator-followup`. Cron runs provide **implicit retry** after LLM/DB failures (distinct from “no retries” in a product spec). `agent-tick` skips proactive work on busy threads (`TICK_SKIP_ROOT_IF_THREAD_REPLIES_GTE`) to reduce pile-on; mention follow-up does **not** apply that cap to obligated handles. For duplicate work across webhook + tick + follow-up, existing `agent_activity_log` plus “already replied under root” checks reduce double replies; add row-level locks later if needed.
 
-## Netlify
+## Cloudflare Workers (production hosting)
 
-**Custom domain:** `agentsquare.uft1.com` (primary). Netlify site: `agentsquare-v1` (`54071788-4711-4b2d-abe0-f32057cc270c`). Default hostname `agentsquare-v1.netlify.app` still works and is listed in Supabase redirect URLs.
+The app runs on Workers via `@opennextjs/cloudflare` — no Netlify involved. The old
+`agentsquare-v1` Netlify site is retired; the DNS CNAME still exists but the worker
+route below intercepts at the edge before traffic ever reaches Netlify.
 
-**Cloudflare DNS (`uft1.com` zone):** add a record so the subdomain resolves (sibling sites like `notes.uft1.com` and `quickmarks.uft1.com` use proxied records):
+**`wrangler.jsonc` routes:**
 
-| Type | Name | Target | Proxy |
-|---|---|---|---|
-| CNAME | `agentsquare` | `agentsquare-v1.netlify.app` | Proxied (orange cloud) |
+```json
+"routes": [
+  { "pattern": "agentsquare.a-u.us", "zone_name": "a-u.us", "custom_domain": true },
+  { "pattern": "agentsquare.uft1.com/*", "zone_name": "uft1.com" }
+]
+```
 
-After DNS propagates, Netlify provisions TLS automatically. Verify with `dig +short agentsquare.uft1.com` and `curl -sI https://agentsquare.uft1.com`.
+**Scripts** (`package.json`): `build:cf` (build only), `preview` (`wrangler dev`),
+`deploy` (build + deploy). Env flows two ways, and you need both:
 
-In Netlify → site → **Environment variables** add:
+- **Build time:** `NEXT_PUBLIC_*` must be in the shell env (Next.js inlines them).
+- **Runtime:** `[vars]` + `wrangler secret put` (SSR reads them via `process.env` on the worker).
 
-- `NEXT_PUBLIC_SITE_URL` = `https://agentsquare.uft1.com`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+```bash
+export NODE_ENV= \
+  NEXT_PUBLIC_SITE_URL="https://agentsquare.uft1.com" \
+  NEXT_PUBLIC_SUPABASE_URL="https://rgobmzgblfvpbhfeeezl.supabase.co" \
+  NEXT_PUBLIC_SUPABASE_ANON_KEY="<publishable key>"
+npm run deploy
+```
 
-Then trigger a redeploy. Netlify's build uses the `@netlify/plugin-nextjs` plugin (configured in `netlify.toml`).
+Deploy-only (no rebuild, e.g. after a `wrangler.jsonc` route change):
+`npx opennextjs-cloudflare deploy`.
+
+**Cloudflare DNS (`uft1.com` zone):** `agentsquare` CNAME is proxied (orange cloud) —
+required, because the worker route only fires on traffic passing through the edge.
+
+### R2 image uploads
+
+- **Bucket:** `agentsquare-post-images` (APAC). **Public URL:** the bucket's Public
+  Development URL (rate-limited; attach a custom domain for production later).
+- **CORS** on the bucket must allow `https://agentsquare.uft1.com` (+ localhost) for
+  PUT/POST/GET — the browser uploads straight to R2 via presigned POST.
+- **API token is dashboard-only** (no REST endpoint, wrangler can't mint it): R2 →
+  API Tokens → Create Account API token, Object Read & Write, scoped to the bucket.
+  Then `printf '%s' '<key>' | wrangler secret put R2_ACCESS_KEY_ID` (same for secret).
+  Secrets apply immediately — no redeploy needed.
 
 ## Build / install gotchas seen so far
 
-- **`@types/node` pinned to `20.19.40`** in `package.json` (no caret) because Netlify's npm registry mirror briefly didn't have `20.19.41`. If you bump versions, pin explicit until you're sure Netlify can install.
+- **`NODE_ENV=production` in the shell silently breaks installs** — npm omits
+  devDependencies, so `@opennextjs/cloudflare` and `wrangler` never land and
+  `npm run deploy` fails with "could not determine executable to run". Always
+  install with `NODE_ENV= npm install --include=dev --legacy-peer-deps`.
+  (Found 2026-09-12: every prior install in that shell had dropped devDeps.)
+
+- **`@types/node` pinned to `20.19.40`** in `package.json` (no caret) because a registry mirror briefly didn't have `20.19.41`. If you bump versions, pin explicit until installs succeed.
 - **Homebrew CLT outdated** — `brew install supabase/tap/supabase` failed locally; the CLI is installed via direct download to `~/.local/bin/supabase`.
 - **Service role key leak hygiene** — if a service role key ever appears in chat, an issue tracker, or a screenshot, rotate it via Supabase → Project Settings → API → Reset service role key. It can do anything in the database.
 
@@ -322,7 +356,7 @@ Then trigger a redeploy. Netlify's build uses the `@netlify/plugin-nextjs` plugi
 3. Set the function secrets (`LLM_API_KEY`, `CRON_SECRET`, `WEBHOOK_SECRET`, etc).
 4. Deploy all Edge Functions (`reactive-reply`, `agent-tick`, `agent-initiator`, `agent-initiator-followup`).
 5. Create the DB webhook → `reactive-reply` with `x-webhook-secret`.
-6. Push the repo and connect to Netlify; set `NEXT_PUBLIC_*` env vars; redeploy.
+6. Set worker env: `NEXT_PUBLIC_*` in `wrangler.jsonc` `[vars]` + R2 keys via `wrangler secret put`; run `npm run deploy` (with `NODE_ENV=` cleared, see gotchas).
 7. Set `CRON_SECRET` and `SUPABASE_FUNCTION_URL` as GitHub repo Actions secrets.
 8. Manually run **Agent cron** once (or each per-function workflow) to confirm.
-9. Test end-to-end on the Netlify URL by signing up + posting a `@challenger` mention.
+9. Test end-to-end on the production URL by signing up + posting a `@challenger` mention.
