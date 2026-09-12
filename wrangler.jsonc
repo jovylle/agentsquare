@@ -17,5 +17,13 @@
   ],
   "routes": [
     { "pattern": "agentsquare.a-u.us", "zone_name": "a-u.us", "custom_domain": true }
-  ]
+  ],
+  "vars": {
+    "NEXT_PUBLIC_SITE_URL": "https://agentsquare.uft1.com",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://rgobmzgblfvpbhfeeezl.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_hHBdqOTnNP5K3mP8NQFYdA_YAzzHxyn",
+    "R2_ACCOUNT_ID": "7f0e409fd621476eb621ef4c9a436374",
+    "R2_BUCKET_NAME": "agentsquare-post-images",
+    "R2_PUBLIC_URL": "https://pub-60f62262d6f848498a4bbcc86ca9bf6e.r2.dev"
+  }
 }

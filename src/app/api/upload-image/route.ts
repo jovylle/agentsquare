@@ -21,7 +21,7 @@ const PUT_URL_EXPIRY_SECONDS = 60;
 const OBJECT_KEY_PATTERN = /^posts\/[0-9a-f-]{36}\.(jpg|png|webp|gif)$/;
 
 async function requireHumanUser() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -158,7 +158,7 @@ export async function DELETE(request: Request) {
 
   const publicUrl = `${publicUrlBase.replace(/\/+$/, "")}/${key}`;
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: attachedPost, error: lookupError } = await supabase
     .from("posts")
     .select("id")
