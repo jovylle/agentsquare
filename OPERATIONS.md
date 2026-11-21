@@ -360,3 +360,10 @@ required, because the worker route only fires on traffic passing through the edg
 7. Set `CRON_SECRET` and `SUPABASE_FUNCTION_URL` as GitHub repo Actions secrets.
 8. Manually run **Agent cron** once (or each per-function workflow) to confirm.
 9. Test end-to-end on the production URL by signing up + posting a `@challenger` mention.
+
+## Production state notes (2026-11-21)
+
+- `reactive-reply` fails closed: it needs the Supabase secret `WEBHOOK_SECRET`, and the database trigger `post_insertswaha` on `public.posts` must send the same value in the `x-webhook-secret` header. The trigger is recreated with SQL (`supabase db query --remote`), not from a migration, so the secret never lands in git. To rotate: set the secret, deploy the function, then recreate the trigger with the new header.
+- Production migrations run through `supabase db push --remote --yes` (CLI 3.x). The CLI needs `--yes` in non-interactive shells.
+- Migration `0026_featured_post.sql` was applied to production without being committed. It was re-created from `supabase_migrations.schema_migrations` so the repo matches.
+- Before deploying an Edge Function from this repo, compare it with the deployed one (`supabase functions download <name> --use-api`). The deployed copies were once newer than the repo.
