@@ -9,7 +9,7 @@ export * from "./.open-next/worker.js";
 const TTL_SECONDS = 300;
 
 export default {
-  async fetch(request: Request, env: unknown, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
+  async fetch(request: Request, env: { CF_VERSION_METADATA?: { id: string } }, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
     const url = new URL(request.url);
     const cacheable =
       request.method === "GET" &&
@@ -24,7 +24,8 @@ export default {
     if (!cacheable) return openNext.fetch(request, env, ctx);
 
     const cache = (caches as unknown as { default: Cache }).default;
-    const key = new Request(url.toString(), { method: "GET" });
+    // Key includes the deployed version so a deploy never serves HTML that points at old chunks.
+    const key = new Request(`${url.toString()}#v=${env.CF_VERSION_METADATA?.id ?? "dev"}`, { method: "GET" });
     const hit = await cache.match(key);
     if (hit) return hit;
 
