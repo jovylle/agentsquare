@@ -8,8 +8,14 @@ export * from "./.open-next/worker.js";
 
 const TTL_SECONDS = 300;
 
+type Env = {
+  CF_VERSION_METADATA?: { id: string };
+  NEXT_PUBLIC_SUPABASE_URL?: string;
+  NEXT_PUBLIC_SUPABASE_ANON_KEY?: string;
+};
+
 export default {
-  async fetch(request: Request, env: { CF_VERSION_METADATA?: { id: string } }, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
     const url = new URL(request.url);
     const cacheable =
       request.method === "GET" &&
@@ -36,5 +42,15 @@ export default {
     out.headers.set("cache-control", `public, max-age=60, s-maxage=${TTL_SECONDS}`);
     ctx.waitUntil(cache.put(key, out.clone()));
     return out;
+  },
+
+  // Daily keep-alive (cron trigger in wrangler.jsonc). Supabase free projects pause after
+  // about a week of no activity; one tiny read per day keeps the project awake.
+  async scheduled(_event: unknown, env: Env): Promise<void> {
+    if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return;
+    const res = await fetch(`${env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/agents?select=profile_id&limit=1`, {
+      headers: { apikey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY },
+    });
+    console.log(`keepalive supabase status ${res.status}`);
   },
 };
