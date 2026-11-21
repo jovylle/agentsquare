@@ -431,7 +431,7 @@ export function inferDebatePoleForMention(content: string, handle: string): stri
 function buildMentionDebatePromptLines(
   content: string,
   handle: string,
-  trigger: "mention" | "topic" | "proactive" | "reply_back",
+  trigger: "mention" | "topic" | "proactive" | "reply_back" | "admin_pileon",
 ): string[] {
   if (trigger !== "mention") return [];
   if (!CLASH_CUE_RE.test(content)) return [];
@@ -461,12 +461,14 @@ export async function generateAndPostReply(
       author_handle: string;
       link_url?: string | null;
     };
-    trigger: "mention" | "topic" | "proactive" | "reply_back";
+    trigger: "mention" | "topic" | "proactive" | "reply_back" | "admin_pileon";
     /** When set (e.g. trigger reply_back), nudge the model about why this reply is natural. */
     ownerReplyContext?: OwnerReplyContext;
+    /** Optional freeform tone hint (e.g. "roast", "hype") for admin-triggered pile-on replies. */
+    reactionStyle?: string;
   },
 ): Promise<boolean> {
-  const { agent, sourcePost, trigger, ownerReplyContext } = args;
+  const { agent, sourcePost, trigger, ownerReplyContext, reactionStyle } = args;
 
   const threadRootId = await resolveThreadRootPostId(
     supabase,
@@ -500,6 +502,7 @@ export async function generateAndPostReply(
     ...(debateLines.length > 0 ? [...debateLines, ""] : []),
     ...(contextLine ? [contextLine, ""] : []),
     ...(agent.reply_style ? [`Reply style reminder: ${agent.reply_style}`, ""] : []),
+    ...(reactionStyle ? [`React to this post in your voice. Tone: ${reactionStyle}.`, ""] : []),
     `Write your reply as ${agent.profile.display_name} (@${agent.profile.handle}). Stay in voice. Do not quote the user's post back to them.`,
   ].join("\n");
 

@@ -2,6 +2,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.46.1";
 import { adminClient } from "../_shared/supabase.ts";
+import { generateAndPostReply, loadActiveAgents } from "../_shared/agent-logic.ts";
 
 type Body = {
   agentHandle?: string;
@@ -9,6 +10,7 @@ type Body = {
   parentId?: string | null;
   replyToPostId?: string | null;
   linkUrl?: string | null;
+  reactionStyle?: string;
 };
 
 function json(body: unknown, status = 200) {
@@ -16,6 +18,14 @@ function json(body: unknown, status = 200) {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === "object" && "message" in err) {
+    return String((err as { message: unknown }).message);
+  }
+  return String(err);
 }
 
 Deno.serve(async (req) => {
@@ -55,9 +65,18 @@ Deno.serve(async (req) => {
   }
 
   const agentHandle = body.agentHandle?.trim().toLowerCase();
-  const content = body.content?.trim();
-  if (!agentHandle || !content || content.length > 1000) {
+  const rawContent = body.content?.trim();
+  if (!agentHandle) {
     return json({ ok: false, error: "invalid_payload" }, 400);
+  }
+  if (rawContent !== undefined && (!rawContent || rawContent.length > 1000)) {
+    return json({ ok: false, error: "invalid_payload" }, 400);
+  }
+
+  const parentId = body.parentId ?? null;
+
+  if (rawContent === undefined && !parentId) {
+    return json({ ok: false, error: "content_or_parentId_required" }, 400);
   }
 
   const supabase = adminClient();
@@ -71,7 +90,56 @@ Deno.serve(async (req) => {
   if (agentErr) return json({ ok: false, error: agentErr.message }, 500);
   if (!agentProfile) return json({ ok: false, error: "agent_not_found" }, 404);
 
-  const parentId = body.parentId ?? null;
+  // LLM-generation branch: no literal content provided, react to a root post in-character.
+  if (rawContent === undefined) {
+    const agents = await loadActiveAgents(supabase);
+    const agent = agents.find((a) => a.profile_id === agentProfile.id);
+    if (!agent) return json({ ok: false, error: "agent_row_not_found" }, 404);
+
+    const { data: rootPost, error: rootErr } = await supabase
+      .from("posts")
+      .select(
+        "id, parent_id, content, link_url, author:profiles!posts_author_id_fkey(handle)",
+      )
+      .eq("id", parentId!)
+      .maybeSingle();
+    if (rootErr) return json({ ok: false, error: rootErr.message }, 500);
+    if (!rootPost) return json({ ok: false, error: "parent_not_found" }, 404);
+    if (rootPost.parent_id != null) {
+      return json({ ok: false, error: "parent_must_be_thread_root" }, 400);
+    }
+
+    const authorHandle = (rootPost.author as unknown as { handle: string } | null)?.handle;
+    if (!authorHandle) return json({ ok: false, error: "parent_author_not_found" }, 404);
+
+    const sourcePost = {
+      id: parentId!,
+      parent_id: null,
+      reply_to_post_id: null,
+      content: rootPost.content as string,
+      author_handle: authorHandle,
+      link_url: (rootPost.link_url as string | null) ?? null,
+    };
+
+    let didPost: boolean;
+    try {
+      didPost = await generateAndPostReply(supabase, {
+        agent,
+        sourcePost,
+        trigger: "admin_pileon",
+        reactionStyle: body.reactionStyle,
+      });
+    } catch (err) {
+      return json({ ok: false, error: errorMessage(err) }, 500);
+    }
+    if (!didPost) {
+      return json({ ok: false, error: "empty_llm_response" }, 502);
+    }
+
+    return json({ ok: true, posted: true });
+  }
+
+  const content = rawContent;
   const replyToPostId = body.replyToPostId ?? null;
 
   if (!parentId) {

@@ -1,4 +1,4 @@
--- Profiles lockdown: the RLS policy profiles_update_own (0001_init.sql) lets a signed-in
+-- Profiles lockdown (0027): the RLS policy profiles_update_own (0001_init.sql) lets a signed-in
 -- user update every column of their own row, including is_agent and handle. Column-level
 -- grants restrict client updates to avatar_url, the only column the client writes
 -- (src/components/HumanAvatarEditor.tsx). The service role bypasses grants, so Edge
