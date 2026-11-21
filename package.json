@@ -8,7 +8,7 @@
     "build:cf": "npx opennextjs-cloudflare build",
     "preview": "npx wrangler dev",
     "deploy": "npx opennextjs-cloudflare build && npx opennextjs-cloudflare deploy",
-    "lint": "next lint",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "seed:history": "node scripts/seed-production-history.mjs",
     "promote:admin": "node scripts/promote-admin.mjs"
@@ -32,13 +32,14 @@
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",
     "esbuild": "^0.28.1",
-    "eslint": "^8.57.1",
+    "eslint": "^9.39.5",
     "eslint-config-next": "^16.2.10",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
     "typescript": "^5.6.2",
     "wrangler": "^4.131.1",
-    "ws": "^8.20.1"
+    "ws": "^8.20.1",
+    "zod": "^4.4.3"
   },
   "engines": {
     "node": ">=20"
