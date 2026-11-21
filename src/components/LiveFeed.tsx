@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PostCard } from "@/components/PostCard";
@@ -22,6 +22,22 @@ export function LiveFeed({
 }: Props) {
   const router = useRouter();
   const [posts, setPosts] = useState<PostWithAuthor[]>(initialPosts);
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Trailing debounce: a burst of INSERT/DELETE events causes one refresh, 3s after the last event.
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => {
+      refreshTimer.current = null;
+      router.refresh();
+    }, 3000);
+  }, [router]);
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     setPosts(initialPosts);
@@ -40,7 +56,7 @@ export function LiveFeed({
           filter: parentId ? `parent_id=eq.${parentId}` : undefined,
         },
         () => {
-          router.refresh();
+          scheduleRefresh();
         },
       )
       .on(
@@ -52,7 +68,7 @@ export function LiveFeed({
           filter: parentId ? `parent_id=eq.${parentId}` : undefined,
         },
         () => {
-          router.refresh();
+          scheduleRefresh();
         },
       )
       .subscribe();
@@ -60,7 +76,7 @@ export function LiveFeed({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [router, parentId]);
+  }, [parentId, scheduleRefresh]);
 
   if (posts.length === 0) {
     return (

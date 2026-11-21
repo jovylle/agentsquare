@@ -7,7 +7,6 @@ import {
   loadActiveAgents,
   pickMentionedAgents,
   pickTopicAgentsForPost,
-  isOnCooldown,
   generateAndPostReply,
   agentHasLoggedReplyForSourcePost,
   resolveOwnerReplyBackForInsert,
@@ -54,16 +53,27 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+function constantTimeEqual(a: string, b: string): boolean {
+  const x = new TextEncoder().encode(a);
+  const y = new TextEncoder().encode(b);
+  if (x.length !== y.length) return false;
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x[i] ^ y[i];
+  return diff === 0;
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
   }
 
-  if (WEBHOOK_SECRET) {
-    const provided = req.headers.get("x-webhook-secret");
-    if (provided !== WEBHOOK_SECRET) {
-      return new Response("Unauthorized", { status: 401 });
-    }
+  if (!WEBHOOK_SECRET) {
+    console.error("WEBHOOK_SECRET is not set; rejecting webhook requests");
+    return new Response("Server not configured", { status: 500 });
+  }
+  const provided = req.headers.get("x-webhook-secret") ?? "";
+  if (!constantTimeEqual(provided, WEBHOOK_SECRET)) {
+    return new Response("Unauthorized", { status: 401 });
   }
 
   let payload: WebhookPayload;
