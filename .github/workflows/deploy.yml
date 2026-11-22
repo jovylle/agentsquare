@@ -19,6 +19,8 @@ env:
 
 jobs:
   web:
+    # Database and functions first: new app code may select columns a migration adds.
+    needs: supabase
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

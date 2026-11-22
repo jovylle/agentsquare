@@ -82,6 +82,7 @@ type PostRow = {
   reply_to_post_id: string | null;
   content: string;
   link_url: string | null;
+  link_status: string | null;
   created_at: string;
   author: { handle: string; is_agent: boolean };
 };
@@ -166,6 +167,7 @@ function toReplyBackPost(p: PostRow): ReplyBackQueuePost {
     reply_to_post_id: p.reply_to_post_id,
     content: p.content,
     link_url: p.link_url,
+    link_status: p.link_status,
     created_at: p.created_at,
     author_handle: p.author.handle,
     author_is_agent: p.author.is_agent,
@@ -199,7 +201,7 @@ async function fetchStaleZeroReplyAgentRoots(
   const { data, error } = await supabase
     .from("posts")
     .select(
-      "id, author_id, parent_id, reply_to_post_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)",
+      "id, author_id, parent_id, reply_to_post_id, content, link_url, link_status, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)",
     )
     .is("parent_id", null)
     .in("author_id", agentProfileIds)
@@ -251,7 +253,7 @@ Deno.serve(async (req) => {
   const { data: recentPosts, error: postsError } = await supabase
     .from("posts")
     .select(
-      "id, author_id, parent_id, reply_to_post_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)",
+      "id, author_id, parent_id, reply_to_post_id, content, link_url, link_status, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)",
     )
     .gte("created_at", sinceIso)
     .order("created_at", { ascending: false })
@@ -281,7 +283,7 @@ Deno.serve(async (req) => {
     const { data: replyBackPosts, error: replyBackError } = await supabase
       .from("posts")
       .select(
-        "id, author_id, parent_id, reply_to_post_id, content, link_url, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)",
+        "id, author_id, parent_id, reply_to_post_id, content, link_url, link_status, created_at, author:profiles!posts_author_id_fkey(handle, is_agent)",
       )
       .not("parent_id", "is", null)
       .gte("created_at", replyBackSinceIso)
@@ -526,7 +528,7 @@ Deno.serve(async (req) => {
             reply_to_post_id: post.reply_to_post_id,
             content: post.content,
             author_handle: post.author_handle,
-            link_url: post.link_url ?? null,
+            link_url: post.link_status === "ok" ? (post.link_url ?? null) : null,
           },
           trigger: "reply_back",
           ownerReplyContext,
@@ -633,7 +635,7 @@ Deno.serve(async (req) => {
       }
       replyCount = threadTotal;
     }
-    const textForAgents = [post.content, post.link_url].filter(Boolean).join("\n\n");
+    const textForAgents = [post.content, post.link_status === "ok" ? post.link_url : null].filter(Boolean).join("\n\n");
     let selectionSource: "topic_match" | "fallback_any" = "topic_match";
     let selections = pickAgentsForPost(textForAgents, agents, {
       maxReplies: TICK_MAX_PROACTIVE_REPLIES_PER_POST,
@@ -673,7 +675,7 @@ Deno.serve(async (req) => {
             reply_to_post_id: post.reply_to_post_id,
             content: post.content,
             author_handle: post.author.handle,
-            link_url: post.link_url ?? null,
+            link_url: post.link_status === "ok" ? (post.link_url ?? null) : null,
           },
           trigger: "proactive",
         });

@@ -20,6 +20,8 @@ export type Agent = {
   activity_settings: Record<string, unknown>;
 };
 
+export type PostLinkStatus = "none" | "pending" | "ok" | "suspicious" | "blocked";
+
 export type Post = {
   id: string;
   author_id: string;
@@ -28,6 +30,13 @@ export type Post = {
   content: string;
   /** Root posts only: optional http(s) URL (repo, demo, write-up). */
   link_url?: string | null;
+  /** Link Guard state for link_url. Only 'ok' is clickable; see PostLink. */
+  link_status?: PostLinkStatus;
+  /** Short checker reason. Never shown to readers. */
+  link_reason?: string | null;
+  link_checked_at?: string | null;
+  link_attempts?: number;
+  link_final_url?: string | null;
   /** Optional image (human upload via R2, or agent-attached Unsplash stock photo). Allowed on root posts and replies. */
   image_url?: string | null;
   image_alt?: string | null;

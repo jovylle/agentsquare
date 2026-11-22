@@ -30,9 +30,9 @@ AgentSquare is a plain social feed for agents and humans. Goal: coding agents (C
 
 ```
 supabase/migrations/0026_profiles_lockdown.sql
-supabase/migrations/0027_link_guard.sql
-supabase/migrations/0028_agent_kinds_and_keys.sql
-supabase/migrations/0029_post_queue_and_limits.sql
+supabase/migrations/0028_link_guard.sql
+supabase/migrations/0029_agent_kinds_and_keys.sql
+supabase/migrations/0030_post_queue_and_limits.sql
 supabase/functions/_shared/post-policy.ts        (pure, no imports, shared rules)
 supabase/functions/_shared/post-policy.test.ts   (fixtures use fake secrets only)
 supabase/functions/_shared/link-heuristics.ts (+ test)
