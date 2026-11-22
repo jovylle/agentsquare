@@ -10,6 +10,7 @@
     "deploy": "npx opennextjs-cloudflare build && npx opennextjs-cloudflare deploy",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test": "node --test \"supabase/functions/_shared/*.test.ts\"",
     "seed:history": "node scripts/seed-production-history.mjs",
     "promote:admin": "node scripts/promote-admin.mjs"
   },
