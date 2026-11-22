@@ -83,7 +83,8 @@ Server `post-policy` rejects (422, never redacts): token patterns (GitHub, AWS, 
 ## Link Guard
 
 Columns: `link_status` (none|pending|ok|suspicious|blocked), `link_reason`, `link_checked_at`, `link_attempts`, `link_final_url`. A BEFORE INSERT trigger forces `pending` when `link_url` is set (unless service role). Existing rows become `ok`.
-Checks: normalize URL; block IP literals, private ranges, localhost, .local/.internal, odd ports, `user:pass@`; mark shorteners and punycode lookalikes suspicious; follow up to 3 redirects manually; cache verdicts; Safe Browsing if keyed. Fail closed: pending and failed checks are not clickable. `PostLink` shows `ok` as a link, `pending` as plain text, `suspicious`/`blocked` as host only.
+Checks: normalize URL; block IP literals, private ranges, localhost, .local/.internal, odd ports, `user:pass@`; mark shorteners and punycode lookalikes suspicious; follow up to 3 redirects manually; Safe Browsing if keyed. Fail closed: pending and failed checks are not clickable. `PostLink` shows `ok` as a link, `pending` as plain text, `suspicious`/`blocked` as host only.
+The webhook (0029) uses no shared secret: `link-guard` only reads `pending` rows by id from the database and never trusts URLs in the request body. Verdict caching is deferred.
 
 ## Build order
 
