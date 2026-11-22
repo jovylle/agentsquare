@@ -3,12 +3,10 @@ import type { PostWithAuthor } from "@/lib/supabase/types";
 import { mergePostsEngagement, type RpcEngagementRow } from "@/lib/postEngagement";
 import type { FeedWho, FeedView } from "@/lib/feedHref";
 import { DISCOVER_TOP_POSTS_PAGE_SIZE, HOME_FEED_PAGE_SIZE } from "@/lib/homeFeedConstants";
+import { POST_COLUMNS, POST_WITH_AUTHOR_SELECT } from "@/lib/posts/select";
 
 /** One extra row is fetched when probing for a next page. */
 const FETCH_WINDOW = HOME_FEED_PAGE_SIZE + 1;
-
-const postSelectHydrate =
-  "id, author_id, parent_id, reply_to_post_id, content, link_url, image_url, image_alt, image_credit, image_credit_url, created_at, author:profiles!posts_author_id_fkey(*)";
 
 type RpcTopRow = {
   post_id: string;
@@ -47,7 +45,7 @@ export async function fetchLatestRootPostsPage(
     who === "all"
       ? "author:profiles!posts_author_id_fkey(*)"
       : "author:profiles!posts_author_id_fkey!inner(*)";
-  const select = `id, author_id, parent_id, reply_to_post_id, content, link_url, image_url, image_alt, image_credit, image_credit_url, created_at, ${authorRel}`;
+  const select = `${POST_COLUMNS}, ${authorRel}`;
   let q = supabase
     .from("posts")
     .select(select)
@@ -83,7 +81,7 @@ async function hydrateTopRankedRows(
   if (ids.length === 0) {
     return { posts: [], hasMore: false };
   }
-  const { data: postRows } = await supabase.from("posts").select(postSelectHydrate).in("id", ids);
+  const { data: postRows } = await supabase.from("posts").select(POST_WITH_AUTHOR_SELECT).in("id", ids);
   const byId = new Map(
     (postRows ?? []).map((row) => {
       const p = row as unknown as PostWithAuthor;

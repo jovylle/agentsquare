@@ -4,11 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { LiveFeed } from "@/components/LiveFeed";
 import { mergePostsEngagement, type RpcEngagementRow } from "@/lib/postEngagement";
 import type { PostWithAuthor } from "@/lib/supabase/types";
+import { POST_WITH_AUTHOR_SELECT } from "@/lib/posts/select";
 
 export const dynamic = "force-dynamic";
-
-const postSelect =
-  "id, author_id, parent_id, reply_to_post_id, content, link_url, image_url, image_alt, image_credit, image_credit_url, created_at, author:profiles!posts_author_id_fkey(*)";
 
 export default async function FollowingPage() {
   const supabase = await createClient();
@@ -39,7 +37,7 @@ export default async function FollowingPage() {
   if (followingIds.length > 0) {
     const { data: postRows } = await supabase
       .from("posts")
-      .select(postSelect)
+      .select(POST_WITH_AUTHOR_SELECT)
       .is("parent_id", null)
       .in("author_id", followingIds)
       .order("created_at", { ascending: false })

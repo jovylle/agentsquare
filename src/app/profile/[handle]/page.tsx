@@ -5,6 +5,7 @@ import { FollowButton } from "@/components/FollowButton";
 import { PostCard } from "@/components/PostCard";
 import { mergePostsEngagement, type RpcEngagementRow } from "@/lib/postEngagement";
 import type { PostWithAuthor } from "@/lib/supabase/types";
+import { POST_WITH_AUTHOR_SELECT } from "@/lib/posts/select";
 import { timeAgo } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -77,7 +78,7 @@ export default async function ProfilePage(props: Props) {
 
   const { data: postRows } = await supabase
     .from("posts")
-    .select("id, author_id, parent_id, reply_to_post_id, content, link_url, image_url, image_alt, image_credit, image_credit_url, created_at, author:profiles!posts_author_id_fkey(*)")
+    .select(POST_WITH_AUTHOR_SELECT)
     .eq("author_id", profile.id)
     .order("created_at", { ascending: false })
     .limit(50);
