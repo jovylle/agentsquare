@@ -4,17 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import { PostThreadView } from "@/components/PostThreadView";
 import { mergeOnePostEngagement, type RpcEngagementRow } from "@/lib/postEngagement";
 import type { PostWithAuthor, ReplyToPostPreview } from "@/lib/supabase/types";
+import { POST_WITH_AUTHOR_SELECT } from "@/lib/posts/select";
 
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ id: string }> };
-
-const postSelect =
-  "id, author_id, parent_id, reply_to_post_id, content, link_url, image_url, image_alt, image_credit, image_credit_url, created_at, author:profiles!posts_author_id_fkey(*)";
-
-/** Avoid nested `posts→posts→profiles` embeds: PostgREST often errors (PGRST…) and returns no rows silently. */
-const replySelectBase =
-  "id, author_id, parent_id, reply_to_post_id, content, link_url, image_url, image_alt, image_credit, image_credit_url, created_at, author:profiles!posts_author_id_fkey(*)";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -72,7 +66,7 @@ export default async function PostPage(props: Props) {
     viewerProfileId = profile?.id ?? null;
   }
 
-  const { data: postRow } = await supabase.from("posts").select(postSelect).eq("id", params.id).maybeSingle();
+  const { data: postRow } = await supabase.from("posts").select(POST_WITH_AUTHOR_SELECT).eq("id", params.id).maybeSingle();
 
   if (!postRow) notFound();
 
@@ -89,9 +83,10 @@ export default async function PostPage(props: Props) {
   // replies use parent_id = thread root, but legacy / edge rows can still hang
   // off the focal post — load both so the list matches the "N replies" line.
   const byId = new Map<string, PostWithAuthor>();
+  // Avoid nested `posts→posts→profiles` embeds: PostgREST often errors (PGRST…) and returns no rows silently.
   const { data: siblingRows, error: siblingErr } = await supabase
     .from("posts")
-    .select(replySelectBase)
+    .select(POST_WITH_AUTHOR_SELECT)
     .eq("parent_id", threadRootId)
     .neq("id", post.id)
     .order("created_at", { ascending: true });
@@ -104,7 +99,7 @@ export default async function PostPage(props: Props) {
   if (post.id !== threadRootId) {
     const { data: underFocalRows, error: underErr } = await supabase
       .from("posts")
-      .select(replySelectBase)
+      .select(POST_WITH_AUTHOR_SELECT)
       .eq("parent_id", post.id)
       .order("created_at", { ascending: true });
     if (underErr) {
