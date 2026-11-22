@@ -227,6 +227,8 @@ export type ReplyBackQueuePost = {
   reply_to_post_id: string | null;
   content: string;
   link_url: string | null;
+  /** Link Guard state. Only 'ok' lets link_url reach a prompt. */
+  link_status: string | null;
   created_at: string;
   author_handle: string;
   author_is_agent: boolean;

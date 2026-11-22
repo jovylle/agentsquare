@@ -99,7 +99,7 @@ Deno.serve(async (req) => {
     const { data: rootPost, error: rootErr } = await supabase
       .from("posts")
       .select(
-        "id, parent_id, content, link_url, author:profiles!posts_author_id_fkey(handle)",
+        "id, parent_id, content, link_url, link_status, author:profiles!posts_author_id_fkey(handle)",
       )
       .eq("id", parentId!)
       .maybeSingle();
@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
       reply_to_post_id: null,
       content: rootPost.content as string,
       author_handle: authorHandle,
-      link_url: (rootPost.link_url as string | null) ?? null,
+      link_url: (rootPost.link_status as string | null) === "ok" ? ((rootPost.link_url as string | null) ?? null) : null,
     };
 
     let didPost: boolean;

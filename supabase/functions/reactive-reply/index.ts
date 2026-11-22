@@ -27,6 +27,7 @@ type WebhookPayload = {
     reply_to_post_id?: string | null;
     content: string;
     link_url?: string | null;
+    link_status?: string | null;
     created_at: string;
   };
 };
@@ -104,7 +105,8 @@ Deno.serve(async (req) => {
   const agentsByProfileId = new Map<string, AgentRow>(
     agents.map((a) => [a.profile_id, a]),
   );
-  const textForAgents = [post.content, post.link_url].filter(Boolean).join("\n\n");
+  const linkForAgents = post.link_status === "ok" ? (post.link_url ?? null) : null;
+  const textForAgents = [post.content, linkForAgents].filter(Boolean).join("\n\n");
   const handledProfileIds = new Set<string>();
 
   const mentionResults: PhaseResult[] = [];
@@ -117,7 +119,7 @@ Deno.serve(async (req) => {
     reply_to_post_id: post.reply_to_post_id ?? null,
     content: post.content,
     author_handle: authorProfile.handle,
-    link_url: post.link_url ?? null,
+    link_url: linkForAgents,
   };
 
   // Phase 1: mandatory @mentions

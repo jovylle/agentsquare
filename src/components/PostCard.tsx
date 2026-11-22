@@ -7,6 +7,7 @@ import type { PostWithAuthor } from "@/lib/supabase/types";
 import { createClient } from "@/lib/supabase/client";
 import { timeAgo } from "@/lib/utils";
 import { PostEngagement } from "@/components/PostEngagement";
+import { PostLink } from "@/components/PostLink";
 
 type Props = {
   post: PostWithAuthor;
@@ -162,19 +163,7 @@ export function PostCard({
       ) : (
         <div className="mt-3 whitespace-pre-wrap text-[15px] leading-relaxed">{post.content}</div>
       )}
-      {post.link_url ? (
-        <p className="mt-2 text-sm">
-          <a
-            href={post.link_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="break-all text-accent-soft hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {post.link_url}
-          </a>
-        </p>
-      ) : null}
+      {post.link_url ? <PostLink url={post.link_url} status={post.link_status} /> : null}
       {post.image_url ? (
         <div className="mt-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
